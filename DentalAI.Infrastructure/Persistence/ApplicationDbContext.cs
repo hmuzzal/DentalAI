@@ -160,11 +160,13 @@ public sealed class ApplicationDbContext(
 
     private Expression<Func<TEntity, bool>> BuildTenantFilter<TEntity>() where TEntity : BaseEntity
     {
+        // Compare with the nullable CurrentClinicId, not CurrentClinicId.Value: EF evaluates every parameter
+        // up front, so .Value threw "Nullable object must have a value" for users without a clinic (super admins).
         return entity => !entity.IsDeleted
             && (BypassTenantFilter
                 || (CurrentClinicId.HasValue
                     && EF.Property<Guid?>(entity, nameof(ITenantEntity.ClinicId)).HasValue
-                    && EF.Property<Guid?>(entity, nameof(ITenantEntity.ClinicId)) == CurrentClinicId.Value));
+                    && EF.Property<Guid?>(entity, nameof(ITenantEntity.ClinicId)) == CurrentClinicId));
     }
 
     private static string BuildConcurrencyEntryDiagnostics(EntityEntry entry)

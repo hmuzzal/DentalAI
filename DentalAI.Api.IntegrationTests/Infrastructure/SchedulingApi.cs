@@ -8,7 +8,7 @@ namespace DentalAI.Api.IntegrationTests.Infrastructure;
 
 public sealed record Envelope<T>(bool Success, string? Message, T? Data, string[]? Errors);
 public sealed record IdDto(Guid Id);
-public sealed record SlotDto(DateTime StartTimeUtc, DateTime EndTimeUtc);
+public sealed record SlotDto(DateTime StartTimeUtc, DateTime EndTimeUtc, string? ClinicTimeZone = null);
 public sealed record AppointmentDto(
     Guid Id, Guid DoctorId, Guid PatientId, Guid ServiceId, DateTime StartTime, DateTime EndTime,
     string Status, string? ClinicTimeZone);
@@ -32,11 +32,16 @@ public sealed class SchedulingApi
 
     private SchedulingApi(HttpClient http) => _http = http;
 
-    public static async Task<SchedulingApi> SignInAsync(ApiFactory factory)
+    public HttpClient Http => _http;
+
+    public static Task<SchedulingApi> SignInAsync(ApiFactory factory) =>
+        SignInAsync(factory, "clinicadmin@dentalai.local", "ClinicAdmin123!");
+
+    public static async Task<SchedulingApi> SignInAsync(ApiFactory factory, string email, string password)
     {
         var http = factory.CreateClient();
         var login = await http.PostAsJsonAsync("/api/auth/login",
-            new { email = "clinicadmin@dentalai.local", password = "ClinicAdmin123!" });
+            new { email, password });
         var auth = await ReadAsync<AuthDto>(login);
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
         return new SchedulingApi(http);
