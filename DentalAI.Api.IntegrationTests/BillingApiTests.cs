@@ -19,6 +19,8 @@ public sealed record CurrencyAmount(string Currency, decimal Amount);
 public sealed record InvoiceList(List<InvoiceSummary> Items, int TotalCount, List<CurrencyAmount> Outstanding);
 public sealed record RevenuePoint(string Period, decimal Revenue);
 public sealed record SchedulingDashboard(List<RevenuePoint> RevenueByDay);
+public sealed record InvoicePartyDoc(string Name, string? AddressLine1, string? CityLine);
+public sealed record InvoiceDocument(Invoice Invoice, InvoicePartyDoc Clinic, InvoicePartyDoc Patient, string ToothNumbering);
 
 /// <summary>Phase 2a: invoices, payments, refunds and voids, with no payment provider.</summary>
 [Collection(ApiCollection.Name)]
@@ -209,6 +211,42 @@ public sealed class BillingApiTests(ApiFactory factory)
         Assert.Equal(open.Id, Assert.Single(outstanding.Items).Id);
         Assert.Equal(70m, Assert.Single(all.Outstanding).Amount);
         Assert.Single(byNumber.Items);
+    }
+
+    [Fact]
+    public async Task List_FindsTheInvoiceForAnAppointment()
+    {
+        var clinic = await TestClinics.CreateAsync(factory);
+        var appointment = await CompletedAppointmentAsync(clinic.Admin);
+        var invoice = await SchedulingApi.ReadAsync<Invoice>(
+            await clinic.Admin.Http.PostAsync($"/api/invoices/from-appointment/{appointment}", null));
+        await CreateDraftAsync(clinic.Admin, unitPrice: 5m);
+
+        var found = await ListAsync(clinic.Admin, $"?appointmentId={appointment}");
+
+        Assert.Equal(invoice.Id, Assert.Single(found.Items).Id);
+    }
+
+    [Fact]
+    public async Task Document_HasTheClinicAndPatientForPrinting()
+    {
+        var clinic = await TestClinics.CreateAsync(factory, "BD", "Asia/Dhaka");
+        var patient = await SchedulingApi.ReadAsync<IdDto>(await clinic.Admin.Http.PostAsJsonAsync("/api/patients", new
+        {
+            firstName = "Nadia", lastName = "Rahman", phone = "01711-000123",
+            addressLine1 = "12 Road 5", city = "Dhaka", postalCode = "1209"
+        }, SchedulingApi.Json));
+        var draft = await SchedulingApi.ReadAsync<Invoice>(await clinic.Admin.Http.PostAsJsonAsync("/api/invoices",
+            new { patientId = patient.Id, lines = new[] { Line("Scaling", 1, 1500m) } }, SchedulingApi.Json));
+
+        var doc = await SchedulingApi.ReadAsync<InvoiceDocument>(await clinic.Receptionist.Http.GetAsync($"/api/invoices/{draft.Id}/document"));
+
+        Assert.StartsWith("Clinic", doc.Clinic.Name);
+        Assert.Equal("Nadia Rahman", doc.Patient.Name);
+        Assert.Equal("12 Road 5", doc.Patient.AddressLine1);
+        Assert.Equal("Dhaka, 1209", doc.Patient.CityLine);
+        Assert.Equal("BDT", doc.Invoice.Currency);
+        Assert.Equal("Fdi", doc.ToothNumbering);
     }
 
     [Fact]

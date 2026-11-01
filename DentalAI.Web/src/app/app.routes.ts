@@ -10,10 +10,32 @@ export const routes: Routes = [
     loadChildren: () => import('./features/auth/auth.routes').then((m) => m.AUTH_ROUTES)
   },
   {
+    // The printable invoice: outside the app layout so it prints cleanly.
+    path: 'invoices/:id/print',
+    title: 'Invoice',
+    canActivate: [authGuard, roleGuard],
+    data: { roles: CLINIC_STAFF },
+    loadComponent: () => import('./features/billing/invoice-print-page.component').then((m) => m.InvoicePrintPageComponent)
+  },
+  {
     path: '',
     component: AppShellComponent,
     canActivate: [authGuard],
     children: [
+      {
+        path: 'invoices',
+        title: 'Invoices',
+        canActivate: [roleGuard],
+        data: { roles: CLINIC_STAFF },
+        loadComponent: () => import('./features/billing/invoices-page.component').then((m) => m.InvoicesPageComponent)
+      },
+      {
+        path: 'invoices/:id',
+        title: 'Invoice',
+        canActivate: [roleGuard],
+        data: { roles: CLINIC_STAFF },
+        loadComponent: () => import('./features/billing/invoice-page.component').then((m) => m.InvoicePageComponent)
+      },
       {
         path: 'dashboard',
         title: 'Dashboard',

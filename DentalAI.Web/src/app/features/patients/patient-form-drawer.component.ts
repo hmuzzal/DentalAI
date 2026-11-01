@@ -23,6 +23,9 @@ import {
 } from '../../core/models/patient.models';
 import { AuthStateService } from '../../core/services/auth-state.service';
 import { PatientsService } from '../../core/services/patients.service';
+import { InvoicesService } from '../../core/services/invoices.service';
+import { formatMoney } from '../../shared/money.pipe';
+import { RouterLink } from '@angular/router';
 import { FormDrawerComponent } from '../../shared/form-drawer.component';
 import { optional, saveErrorText, touchAll } from '../../shared/forms';
 import { formatPhone, phoneCountryHint } from '../../shared/phone.pipe';
@@ -38,7 +41,7 @@ type Tab = (typeof TABS)[number];
   selector: 'app-patient-form-drawer',
   standalone: true,
   imports: [
-    NgTemplateOutlet, ReactiveFormsModule, NzAlertModule, NzAutocompleteModule, NzButtonModule, NzCheckboxModule,
+    NgTemplateOutlet, RouterLink, ReactiveFormsModule, NzAlertModule, NzAutocompleteModule, NzButtonModule, NzCheckboxModule,
     NzDatePickerModule, NzFormModule, NzInputModule, NzRadioModule, NzSelectModule, NzSkeletonModule, NzSwitchModule,
     NzTabsModule, FormDrawerComponent
   ],
@@ -75,6 +78,12 @@ type Tab = (typeof TABS)[number];
     <!-- Details -->
     <ng-template #details>
       <ng-container [formGroup]="form">
+        @if (balance(); as owed) {
+          <nz-alert class="balance" nzType="warning" nzShowIcon [nzMessage]="'Balance due: ' + owed" [nzAction]="viewInvoices" />
+          <ng-template #viewInvoices>
+            <a nz-button nzSize="small" routerLink="/invoices" [queryParams]="{ patient: patient()?.id, filter: 'Unpaid' }" (click)="closed.emit()">View invoices</a>
+          </ng-template>
+        }
         <div class="row">
           <nz-form-item>
             <nz-form-label nzRequired nzFor="patient-first">First name</nz-form-label>
@@ -279,6 +288,7 @@ type Tab = (typeof TABS)[number];
   styles: [`
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--da-space-3); }
     .row--address { grid-template-columns: 2fr 1fr 1fr; }
+    .balance { margin-bottom: var(--da-space-3); }
     .full { width: 100%; }
     .muted { color: var(--da-ink-2); }
     .note { font-size: 13px; margin: 4px 0 0; }
@@ -301,6 +311,7 @@ export class PatientFormDrawerComponent {
   readonly saved = output<Patient>();
 
   private readonly patientsService = inject(PatientsService);
+  private readonly invoices = inject(InvoicesService);
   private readonly auth = inject(AuthStateService);
   private readonly messages = inject(NzMessageService);
   private readonly fb = inject(NonNullableFormBuilder);
@@ -323,6 +334,8 @@ export class PatientFormDrawerComponent {
   readonly error = signal<string | null>(null);
   readonly loading = signal(false);
   readonly loadError = signal(false);
+  /** What the patient still owes across their invoices, e.g. "$120.00" (null when nothing).  */
+  readonly balance = signal<string | null>(null);
   readonly tabIndex = signal(0);
   /** Problems are only flagged on tabs after the first Save attempt. */
   private readonly submitted = signal(false);
@@ -430,6 +443,7 @@ export class PatientFormDrawerComponent {
           this.load();
         } else {
           this.loaded.set(null);
+          this.balance.set(null);
           this.fill(null);
         }
       });
@@ -444,10 +458,23 @@ export class PatientFormDrawerComponent {
     // Lists don't include insurance, so fetch the full record.
     this.patientsService.getById(patient.id).pipe(finalize(() => this.loading.set(false))).subscribe({
       next: (full) => {
+        this.loadBalance(full.id);
         this.loaded.set(full);
         this.fill(full);
       },
       error: () => this.loadError.set(true)
+    });
+  }
+
+  /** Sums what the patient owes on issued, unpaid invoices (per currency). */
+  private loadBalance(patientId: string): void {
+    this.balance.set(null);
+    this.invoices.list({ patientId, outstandingOnly: true, page: 1, pageSize: 1 }).subscribe({
+      next: (list) => {
+        const owed = list.outstanding.filter((x) => x.amount > 0);
+        this.balance.set(owed.length ? owed.map((x) => formatMoney(x.amount, x.currency)).join(' + ') : null);
+      },
+      error: () => this.balance.set(null)
     });
   }
 

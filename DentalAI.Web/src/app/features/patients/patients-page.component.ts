@@ -1,7 +1,7 @@
-import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzIconModule } from 'ng-zorro-antd/icon';
@@ -14,6 +14,7 @@ import { PagedResult } from '../../core/models/api-response.model';
 import { Patient } from '../../core/models/patient.models';
 import { PatientsService } from '../../core/services/patients.service';
 import { PageHeaderComponent } from '../../shared/page-header.component';
+import { DateOnlyPipe } from '../../shared/date-only.pipe';
 import { PhonePipe } from '../../shared/phone.pipe';
 import { PageStateComponent } from '../../shared/page-state.component';
 import { LoadStatus } from '../../shared/remote-data';
@@ -32,7 +33,7 @@ interface Query {
   selector: 'app-patients-page',
   standalone: true,
   imports: [
-    DatePipe, FormsModule, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule,
+    DateOnlyPipe, FormsModule, RouterLink, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule,
     NzTableModule, PageHeaderComponent, PageStateComponent, PhonePipe, PatientFormDrawerComponent
   ],
   template: `
@@ -78,8 +79,9 @@ interface Query {
                   </td>
                   <td class="nowrap">{{ (patient.phone | phone) || '—' }}</td>
                   <td>{{ patient.email || '—' }}</td>
-                  <td class="nowrap num">{{ patient.dateOfBirth ? (patient.dateOfBirth | date: 'MM/dd/yyyy' : 'UTC') : '—' }}</td>
+                  <td class="nowrap num">{{ patient.dateOfBirth ? (patient.dateOfBirth | dateOnly: 'MM/dd/yyyy') : '—' }}</td>
                   <td nzAlign="right" class="nowrap">
+                    <a nz-button nzType="link" routerLink="/invoices" [queryParams]="{ patient: patient.id }">Invoices</a>
                     <button nz-button nzType="link" (click)="openForm(patient)">Edit</button>
                     <button nz-button nzType="link" nzDanger [nzLoading]="deletingId() === patient.id"
                             nz-popconfirm [nzPopconfirmTitle]="'Delete ' + patient.fullName + '? Their past appointments are kept.'"

@@ -71,6 +71,27 @@ public sealed class BillingService(
                 : Result<InvoiceDto>.Ok(ToDto(invoice, Today(await ClinicZoneAsync(clinicId, cancellationToken))));
         });
 
+    /// <summary>The invoice with the clinic's and patient's names and addresses, for printing.</summary>
+    public async Task<Result<InvoiceDocumentDto>> GetDocumentAsync(Guid id, CancellationToken cancellationToken) =>
+        await WithClinicAsync(async clinicId =>
+        {
+            var invoice = await billing.GetInvoiceAsync(id, cancellationToken);
+            if (invoice is null) return Result<InvoiceDocumentDto>.Fail(ResultStatus.NotFound, "Invoice was not found.");
+
+            var clinic = await clinics.GetByIdAsync(clinicId, cancellationToken);
+            var settings = await GetOrCreateSettingsAsync(clinicId, cancellationToken);
+            var patient = invoice.Patient!;
+            var cityLine = string.Join(", ", new[] { patient.City, string.Join(" ", new[] { patient.State, patient.PostalCode }
+                .Where(x => !string.IsNullOrWhiteSpace(x))) }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            return Result<InvoiceDocumentDto>.Ok(new InvoiceDocumentDto(
+                ToDto(invoice, Today(SchedulingEngine.ResolveTimeZone(clinic?.TimeZone))),
+                new InvoicePartyDto(clinic?.Name ?? string.Empty, Optional(clinic?.Address), null, null, Optional(clinic?.Phone), Optional(clinic?.Email)),
+                new InvoicePartyDto($"{patient.FirstName} {patient.LastName}".Trim(), patient.AddressLine1, patient.AddressLine2,
+                    Optional(cityLine), patient.Phone, patient.Email),
+                settings.ToothNumbering));
+        });
+
     public async Task<Result<InvoiceDto>> CreateAsync(CreateInvoiceRequest request, CancellationToken cancellationToken) =>
         await WithClinicAsync(async clinicId =>
         {

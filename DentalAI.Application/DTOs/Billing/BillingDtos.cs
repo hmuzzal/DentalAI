@@ -87,6 +87,8 @@ public sealed class InvoiceListQuery
     public const int MaxPageSize = 100;
     public InvoiceStatus? Status { get; set; }
     public Guid? PatientId { get; set; }
+    /// <summary>The invoice for an appointment (at most one that isn't void).</summary>
+    public Guid? AppointmentId { get; set; }
     /// <summary>Only invoices with money still owed (Issued or PartiallyPaid).</summary>
     public bool OutstandingOnly { get; set; }
     /// <summary>Matches the invoice number or the patient's name.</summary>
@@ -175,3 +177,9 @@ public sealed record InvoiceDto(
     DateTime CreatedDate,
     IReadOnlyList<InvoiceLineDto> Lines,
     IReadOnlyList<PaymentDto> Payments);
+
+/// <summary>Who an invoice is from or to, for the printed invoice.</summary>
+public sealed record InvoicePartyDto(string Name, string? AddressLine1, string? AddressLine2, string? CityLine, string? Phone, string? Email);
+
+/// <summary>GET /invoices/{id}/document: everything needed to print or send an invoice.</summary>
+public sealed record InvoiceDocumentDto(InvoiceDto Invoice, InvoicePartyDto Clinic, InvoicePartyDto Patient, ToothNumbering ToothNumbering);

@@ -300,11 +300,19 @@ repatriation with a Bangladeshi accountant first.
   drawer and the dashboard use the clinic's currency; dashboard revenue reads "Payments received".
 - CDT codes are the ADA's copyright: clinics can type codes, but DentalAI must not ship the code list without a licence.
 
-**2b. Billing UI**
+**2b. Billing UI** ✅ Done 2026-11-02
 - Billing nav group: **Invoices** (filter by status, patient and dates; totals outstanding), **invoice detail** (lines,
   payments, record payment, refund, void), "Create invoice" from a completed appointment and from a patient, patient
   balance on the patient record.
 - **Printable invoice** (print stylesheet → browser "Save as PDF"). Server-side PDF (QuestPDF) later if needed.
+- Built: Billing nav group (Invoices, Billing settings). Invoices list (All / Drafts / Unpaid / Paid / Void, search,
+  `?patient=` filter, outstanding total per currency). Invoice page (lines, totals, payments with refunds; Edit / Issue /
+  Delete for drafts, Record payment, Refund and Void for admins, Print). Draft editor (patient search, lines with
+  service, code, tooth, quantity, price, insurance estimate; "insurance covers %"; discount, tax, notes; live preview).
+  "Invoice" on completed appointments opens their invoice or creates the draft. Patients: "Invoices" link and
+  "Balance due" on the patient record. Printable invoice at `/invoices/{id}/print` (`GET /invoices/{id}/document`).
+- Fixed with it: date-only values (date of birth, invoice dates) showed a day early for users east of UTC, from the
+  date pipe with a `'UTC'` zone. New `dateOnly` pipe for all date-only values.
 
 **2c. Online payments (needs a Stripe account to develop and test)**
 - `IPaymentGateway` (create a payment link or checkout session, verify a webhook, refund). `StripeGateway` uses the

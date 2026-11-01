@@ -48,7 +48,14 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Patients', path: '/patients', icon: 'solution' },
       { label: 'Doctors', path: '/doctors', icon: 'team' },
       { label: 'Services', path: '/services', icon: 'medicine-box' },
-      { label: 'Staff', path: '/staff', icon: 'user', roles: ['ClinicAdmin'] },
+      { label: 'Staff', path: '/staff', icon: 'user', roles: ['ClinicAdmin'] }
+    ]
+  },
+  {
+    label: 'Billing',
+    roles: CLINIC_STAFF,
+    items: [
+      { label: 'Invoices', path: '/invoices', icon: 'file-text' },
       { label: 'Billing settings', path: '/settings/billing', icon: 'setting', roles: ['ClinicAdmin'] }
     ]
   },

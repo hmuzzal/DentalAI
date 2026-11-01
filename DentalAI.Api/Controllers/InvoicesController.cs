@@ -20,6 +20,11 @@ public sealed class InvoicesController(BillingService billing) : ApiControllerBa
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await billing.GetAsync(id, cancellationToken));
 
+    /// <summary>The invoice with clinic and patient names and addresses, for printing.</summary>
+    [HttpGet("{id:guid}/document")]
+    public async Task<IActionResult> GetDocument(Guid id, CancellationToken cancellationToken) =>
+        HandleResult(await billing.GetDocumentAsync(id, cancellationToken));
+
     /// <summary>A draft. Issue it to give it a number and make it payable.</summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateInvoiceRequest request, CancellationToken cancellationToken) =>

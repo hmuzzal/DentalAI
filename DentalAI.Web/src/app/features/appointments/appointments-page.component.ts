@@ -12,7 +12,8 @@ import { NzSegmentedModule } from 'ng-zorro-antd/segmented';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTagModule } from 'ng-zorro-antd/tag';
-import { Subscription } from 'rxjs';
+import { finalize, map, of, Subscription, switchMap } from 'rxjs';
+import { InvoicesService } from '../../core/services/invoices.service';
 import { APPOINTMENT_STATUS } from '../../core/appointment-status';
 import { AppointmentStatus } from '../../core/models/appointment.models';
 import { Doctor } from '../../core/models/doctor.models';
@@ -115,6 +116,10 @@ const LAYOUTS: Layout[] = ['calendar', 'list'];
                         <span>{{ item.doctorName }} · {{ item.serviceName }}</span>
                         <nz-tag [nzColor]="status[item.status].color">{{ status[item.status].label }}</nz-tag>
                         <div class="appointment__actions">
+                          @if (item.status === 'Completed') {
+                            <button nz-button nzType="link" nzSize="small" (click)="openInvoice(item)" [nzLoading]="invoicingId() === item.id"
+                                    [attr.aria-label]="'Invoice for ' + item.patientName">Invoice</button>
+                          }
                           @if (canReschedule(item.status)) {
                             <button nz-button nzType="link" nzSize="small" (click)="reschedule(item)"
                                     [attr.aria-label]="'Reschedule ' + item.patientName">Reschedule</button>
@@ -162,6 +167,10 @@ const LAYOUTS: Layout[] = ['calendar', 'list'];
                     <td>{{ item.serviceName }}</td>
                     <td><nz-tag [nzColor]="status[item.status].color">{{ status[item.status].label }}</nz-tag></td>
                     <td nzAlign="right" class="nowrap">
+                      @if (item.status === 'Completed') {
+                        <button nz-button nzType="link" nzSize="small" (click)="openInvoice(item)" [nzLoading]="invoicingId() === item.id"
+                                [attr.aria-label]="'Invoice for ' + item.patientName">Invoice</button>
+                      }
                       @if (canReschedule(item.status)) {
                         <button nz-button nzType="link" nzSize="small" (click)="reschedule(item)"
                                 [attr.aria-label]="'Reschedule ' + item.patientName">Reschedule</button>
@@ -246,6 +255,8 @@ export class AppointmentsPageComponent {
   private readonly authState = inject(AuthStateService);
   private readonly booking = inject(BookingService);
   private readonly router = inject(Router);
+  private readonly invoices = inject(InvoicesService);
+  readonly invoicingId = signal<string | null>(null);
   private readonly route = inject(ActivatedRoute);
 
   readonly status = APPOINTMENT_STATUS;
@@ -434,6 +445,15 @@ export class AppointmentsPageComponent {
 
   canCancel(status: AppointmentStatus): boolean {
     return (CANCELLABLE_STATUSES as readonly string[]).includes(status);
+  }
+
+  /** Opens the appointment's invoice, creating a draft (one line for its service) if it has none yet. */
+  openInvoice(item: CalendarAppointment): void {
+    this.invoicingId.set(item.id);
+    this.invoices.list({ appointmentId: item.id, page: 1, pageSize: 1 }).pipe(
+      switchMap((list) => list.items.length ? of(list.items[0].id) : this.invoices.createFromAppointment(item.id).pipe(map((inv) => inv.id))),
+      finalize(() => this.invoicingId.set(null))
+    ).subscribe({ next: (id) => void this.router.navigate(['/invoices', id]) });
   }
 
   cancel(item: CalendarAppointment): void {

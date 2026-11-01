@@ -32,6 +32,7 @@ public sealed class BillingRepository(ApplicationDbContext dbContext) : IBilling
         if (query.OutstandingOnly)
             invoices = invoices.Where(x => x.Status == InvoiceStatus.Issued || x.Status == InvoiceStatus.PartiallyPaid);
         if (query.PatientId.HasValue) invoices = invoices.Where(x => x.PatientId == query.PatientId.Value);
+        if (query.AppointmentId.HasValue) invoices = invoices.Where(x => x.AppointmentId == query.AppointmentId.Value);
 
         // Issued invoices filter on their issue date; drafts (no issue date) on the day they were created.
         if (query.From.HasValue)
