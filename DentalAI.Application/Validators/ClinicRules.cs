@@ -10,4 +10,6 @@ public static class ClinicRules
     public static bool IsKnownTimeZone(string? id) => SchedulingEngine.TryFindTimeZone(id, out _);
 
     public static bool IsAllowedSlotInterval(int minutes) => AllowedSlotIntervals.Contains(minutes);
+
+    public static bool IsKnownCountry(string? code) => Common.Phone.PhoneNumberRules.IsSupportedRegion(code);
 }

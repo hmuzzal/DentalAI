@@ -8,7 +8,6 @@ import { NzSelectModule } from 'ng-zorro-antd/select';
 import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { finalize } from 'rxjs';
 import { DentalService, ServiceRequest } from '../../core/models/service.models';
-import { ClinicOptionsService } from '../../core/services/clinic-options.service';
 import { ServicesCatalogService } from '../../core/services/services-catalog.service';
 import { FormDrawerComponent } from '../../shared/form-drawer.component';
 import { optional, saveErrorText, touchAll } from '../../shared/forms';
@@ -26,19 +25,6 @@ import { optional, saveErrorText, touchAll } from '../../shared/forms';
                      [submitLabel]="service() ? 'Save changes' : 'Add service'" [saving]="saving()" [error]="error()"
                      (closed)="closed.emit()" (submitted)="save()">
       <form nz-form nzLayout="vertical" [formGroup]="form" (ngSubmit)="save()">
-        @if (clinicOptions.isSuperAdmin() && !service()) {
-          <nz-form-item>
-            <nz-form-label nzRequired nzFor="service-clinic">Clinic</nz-form-label>
-            <nz-form-control nzErrorTip="Choose the clinic that offers this service.">
-              <nz-select nzId="service-clinic" formControlName="clinicId" nzShowSearch nzPlaceHolder="Select a clinic"
-                         [nzLoading]="!clinicOptions.clinics().length">
-                @for (clinic of clinicOptions.clinics(); track clinic.id) {
-                  <nz-option [nzValue]="clinic.id" [nzLabel]="clinic.name" />
-                }
-              </nz-select>
-            </nz-form-control>
-          </nz-form-item>
-        }
 
         <nz-form-item>
           <nz-form-label nzRequired nzFor="service-name">Name</nz-form-label>
@@ -95,7 +81,6 @@ export class ServiceFormDrawerComponent {
   readonly closed = output<void>();
   readonly saved = output<DentalService>();
 
-  readonly clinicOptions = inject(ClinicOptionsService);
   private readonly servicesCatalog = inject(ServicesCatalogService);
   private readonly messages = inject(NzMessageService);
 
@@ -103,7 +88,6 @@ export class ServiceFormDrawerComponent {
   readonly error = signal<string | null>(null);
 
   readonly form = inject(NonNullableFormBuilder).group({
-    clinicId: [''],
     name: ['', [Validators.required, Validators.maxLength(150)]],
     durationMinutes: [30, [Validators.required, Validators.min(5), Validators.max(480)]],
     price: [0, [Validators.required, Validators.min(0)]],
@@ -115,12 +99,9 @@ export class ServiceFormDrawerComponent {
     effect(() => {
       if (!this.open()) return;
       const service = this.service();
-      const needsClinic = this.clinicOptions.isSuperAdmin() && !service;
       untracked(() => {
         this.error.set(null);
-        this.form.controls.clinicId.setValidators(needsClinic ? Validators.required : null);
         this.form.reset({
-          clinicId: '',
           name: service?.name ?? '',
           durationMinutes: service?.durationMinutes ?? 30,
           price: service?.price ?? 0,
@@ -140,7 +121,6 @@ export class ServiceFormDrawerComponent {
 
     const value = this.form.getRawValue();
     const request: ServiceRequest = {
-      clinicId: value.clinicId || null,
       name: value.name.trim(),
       description: optional(value.description),
       price: value.price,

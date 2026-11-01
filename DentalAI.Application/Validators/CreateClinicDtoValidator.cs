@@ -11,6 +11,8 @@ public sealed class CreateClinicDtoValidator : AbstractValidator<CreateClinicDto
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(150);
         RuleFor(x => x.Phone).NotEmpty().Matches(PhonePattern);
+        RuleFor(x => x.Country).NotEmpty().Must(ClinicRules.IsKnownCountry)
+            .WithMessage("Country must be a 2-letter country code, e.g. US.");
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(200);
         RuleFor(x => x.Address).NotEmpty().MaximumLength(500);
         RuleFor(x => x.TimeZone).NotEmpty().MaximumLength(100)

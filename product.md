@@ -15,11 +15,21 @@ gateways, local clinic workflows).
 
 | Role | Who | Main jobs |
 |---|---|---|
-| SuperAdmin | Platform operator | Manage clinics (tenants), support |
-| ClinicAdmin | Clinic owner / office manager | Doctors, services, schedules, staff, reports |
+| SuperAdmin ("Platform admin") | Platform operator | Manage clinics (tenants), platform usage (counts only). **No access to clinic data** (see below) |
+| ClinicAdmin | Clinic owner / office manager | Doctors, services, schedules, **staff (invites, roles)**, reports |
 | Receptionist | Front desk | Book / reschedule / cancel, check-in, patient records |
 | Patient _(planned)_ | Clinic's patient | Self-booking, reminders, invoices (patient portal) |
 | AI receptionist _(planned)_ | System agent | Answer questions, find slots, book on a patient's behalf |
+
+**Platform admins and clinic data (decided 2026-11-02).** Patient names, dates of birth, insurance and appointment
+details are protected health information (HIPAA). DentalAI is each clinic's business associate, so platform staff get
+only what they need: clinics and platform-wide counts. They cannot read or change any clinic's patients,
+appointments, doctors, services or schedules:
+- API: clinic-data endpoints use the `ClinicStaff` policy (ClinicAdmin, Receptionist). The tenant query filter has no
+  bypass, so a user without a clinic sees no clinic rows even if an endpoint is misconfigured. The only cross-clinic
+  reads are in `PlatformRepository`, which returns counts (`GET /platform/overview`).
+- UI: platform admins see Platform overview and Clinics only; clinic routes are guarded.
+- Planned: time-limited, audited **support access** to one clinic, approved by that clinic, before onboarding real clinics.
 
 ## 3. Core principles
 
@@ -69,7 +79,7 @@ gateways, local clinic workflows).
 |---|---|---|
 | 0 | Foundation: auth, multi-tenancy, clinics, doctors, services, patients, dashboard | ✅ Done (committed) |
 | 1 | Scheduling engine | 🟡 ~80%: core built, uncommitted, gaps below |
-| 1.5 | US readiness: E.164 phones, insurance profile (i18n scaffold done in Phase 1) | ⬜ Not started |
+| 1.5 | US readiness: E.164 phones, clinic country, patient address and SMS consent, insurance | ✅ Done 2026-11-01 |
 | 2 | Billing, invoices and payments (Stripe first) | ⬜ |
 | 3 | Email and SMS reminders (Twilio / SendGrid, background jobs) | ⬜ |
 | 4 | Reports and analytics | ⬜ (a basic dashboard exists) |
@@ -82,7 +92,7 @@ gateways, local clinic workflows).
 
 ## 7. Current status (audit, 2026-11-01)
 
-**Build:** API ✅ builds · Angular ✅ builds (initial bundle 1.70 MB, over the 1.5 MB budget) · Tests ✅ 44 unit + 18 API integration pass (2026-11-01).
+**Build:** API ✅ builds · Angular ✅ builds (initial bundle 1.72 MB, over the 1.5 MB budget) · Tests ✅ 57 unit + 42 API integration pass (2026-11-01).
 **Git:** Phase 0 and most of Phase 1 committed; the DST / time-zone / slot-interval / i18n slice is uncommitted.
 
 ### Done
@@ -159,6 +169,26 @@ gateways, local clinic workflows).
 - [ ] Angular initial bundle is 1.70 MB, over the 1.5 MB budget (build warning). Likely ng-zorro and the chart
   library on first load; lazy-load or trim imports.
 - [ ] Migration `20260622093000_BackfillClinicTimeZone` has no `.Designer.cs`, so EF never runs it.
+- [ ] Phones saved before 2026-11-01 are not E.164 (e.g. the demo clinic's `+1-555-0101`). They are normalised the
+  next time each record is saved; before SMS (Phase 3) add a one-off backfill that normalises them or flags the ones that fail.
+- [ ] **Support access** for platform admins: time-limited, approved by the clinic, every read and change written to an
+  audit log. Needed before onboarding real clinics (platform admins currently have no way to help with clinic data).
+- [x] **Staff accounts and invites** (2026-11-02). No self sign-up (`POST /auth/register` removed). People join only
+  through a single-use invite link (256-bit token; only its SHA-256 is stored; expires in 7 days; a new link replaces
+  the old one). The invited person sets their own password (10+ characters, a letter and a number).
+  - Platform admin: New clinic includes the **first admin**; Clinics → Staff lists a clinic's accounts, invites admins,
+    makes new links, deactivates/reactivates. No role changes, no receptionist invites, no clinic data.
+  - Clinic admin: **Staff** page (`/staff`): invite admins or receptionists, change roles, new links,
+    deactivate/reactivate. Can't change their own role or deactivate themselves, or remove the last active admin.
+  - Deactivating or changing a role ends that person's refresh token. Invited users can't sign in until they accept.
+  - Deleting a clinic deactivates its staff, ends their sessions and voids pending invites; sign-in, token refresh and
+    `/auth/me` also refuse staff of a deleted clinic.
+- [ ] **Invite emails** (Phase 3): send the invite link by email instead of the admin copying it. Same for "Forgot password",
+  which can reuse the invite-token mechanism.
+- [ ] Access tokens stay valid until they expire (60 minutes) after someone is deactivated or their clinic is deleted.
+  The next page load ends the session (`/auth/me` returns 401), but API calls with the old token work until expiry.
+  If that window matters, check the user's status per request (cached) or shorten the token lifetime.
+- [ ] Week start is fixed to Sunday (US). Make it a clinic setting for the Bangladesh phase (Saturday).
 - [ ] i18n: only the clinic form is marked up (`i18n` / `$localize`); the Doctors, Patients and Services screens are not yet. Run `pnpm extract-i18n` to update
   `src/locale/messages.xlf`; mark other screens as they are touched.
 
@@ -198,20 +228,37 @@ gateways, local clinic workflows).
   - Patients: server-side search (every word must match name, phone or email) and paging via
     `GET /patients/search?search=&page=&pageSize=` (max 100), because patient lists grow without limit.
   - Delete with a confirm popover (soft delete). Deleting a doctor with upcoming Pending/Confirmed appointments
-    returns 409 with the count. Super admins get a Clinic column and pick the clinic when adding.
-  - API: doctor `clinicId` is optional like patients' (clinic users always get their own clinic); super admins
-    can create services (`UpsertServiceRequest.ClinicId`).
+    returns 409 with the count. (Super-admin Clinic column and clinic picker removed 2026-11-02: platform admins no
+    longer see clinic data.)
+  - API: doctor, patient and service requests have no `clinicId`: always the signed-in user's clinic (2026-11-02).
   - Checked in the browser as a super admin (add, edit, search, paging, page size, delete, empty states).
-    Not checked as a clinic admin (the dev database's clinic-admin login was rejected).
-- [ ] 5. Merge Appointments and Calendar; rebuild Doctor schedules as a weekly grid
+    Clinic-admin view (no Clinic column or clinic field) checked later the same day on a throwaway database.
+  - Fixed with it: role-restricted pages (Clinics) bounced super admins to the dashboard on a refresh or direct link,
+    because the role guard ran before the profile loaded. The guard now loads the profile first.
+- [x] 5. Merge Appointments and Calendar; rebuild Doctor schedules as a weekly grid (2026-11-01)
+  - `/appointments`: Day / Week / Month range, Calendar / List layout, Today and previous/next, doctor filter; state in
+    the URL. Weeks run Sunday–Saturday (API too). Month cells show 3 appointments, then "+N more" opens the day.
+    `/calendar` redirects here; the Calendar nav item is gone.
+  - Doctor schedules: weekly grid (Sun–Sat) with open/closed, split shifts, breaks, a timeline bar and copy to
+    Mon–Fri / every day; time off with date ranges; validation before saving; unsaved-changes bar and a prompt when
+    switching doctors; `?doctor=` deep link and an "Hours" link on the Doctors page.
 - [x] 6. Booking flow (= Phase 1 gap 1). Also: ng-zorro locale set to English (it defaulted to Chinese)
 
 ### Phase 1.5: US readiness
-- Phone: normalise to E.164 (libphonenumber-csharp), default region from clinic country, US display format
-- `Clinic.Country` (default `US`)
-- `PatientInsurance` entity (primary/secondary): carrier, member ID, group #, subscriber name/DOB, relationship to patient
-- Patient fields: address, preferred contact method, SMS opt-in flag and timestamp (needed for TCPA)
-- UI: insurance tab on the patient form
+- [x] Phone: normalise to E.164 (libphonenumber-csharp), default region from clinic country, US display format (2026-11-01)
+  - `PhoneNumberRules` (Application): clinic, doctor and patient phones are stored as E.164; numbers without +code are
+    read in the clinic's country, invalid ones return 400. UI shows US numbers as (212) 555-0142 (`phone` pipe), and
+    the phone fields say which country a number without a code is read as.
+  - Patient search matches phone digits, so "(646) 555-0199" finds +16465550199.
+- [x] `Clinic.Country` (default `US`; existing Asia/Dhaka clinics set to `BD`); `GET /lookups/countries` (US first);
+  Country field on the clinic form; `UserProfile.clinicCountry` (2026-11-01)
+- [x] `PatientInsurance` entity (primary/secondary): carrier, member ID, group #, subscriber name/DOB, relationship to
+  patient. Synced by priority (updated in place); filtered unique index on (PatientId, Priority) where not deleted (2026-11-01)
+- [x] Patient fields: address (street, apt, city, state, ZIP), preferred contact method (phone/text/email), SMS opt-in
+  with `SmsOptInAtUtc` / `SmsOptOutAtUtc` recorded by the server (TCPA). Text needs consent; email needs an address (2026-11-01)
+- [x] UI: patient form in tabs (Details, Contact, Insurance); loads the full record (`GET /patients/{id}`) when editing;
+  tabs with problems get a red dot and Save jumps to the first one (2026-11-01)
+- Migration `AddUsReadiness`. Checked in the browser on a throwaway database (clinic admin and super admin).
 
 ### Phase 2: billing, invoices and payments
 - `Invoice`, `InvoiceLine`, `Payment`; generate an invoice from a completed appointment

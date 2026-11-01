@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzIconModule } from 'ng-zorro-antd/icon';
@@ -9,10 +10,10 @@ import { NzPopconfirmModule } from 'ng-zorro-antd/popconfirm';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { finalize } from 'rxjs';
 import { Doctor } from '../../core/models/doctor.models';
-import { ClinicOptionsService } from '../../core/services/clinic-options.service';
 import { DoctorsService } from '../../core/services/doctors.service';
 import { matchesSearch } from '../../shared/forms';
 import { PageHeaderComponent } from '../../shared/page-header.component';
+import { PhonePipe } from '../../shared/phone.pipe';
 import { PageStateComponent } from '../../shared/page-state.component';
 import { remoteData } from '../../shared/remote-data';
 import { DoctorFormDrawerComponent } from './doctor-form-drawer.component';
@@ -21,8 +22,8 @@ import { DoctorFormDrawerComponent } from './doctor-form-drawer.component';
   selector: 'app-doctors-page',
   standalone: true,
   imports: [
-    FormsModule, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule, NzTableModule,
-    PageHeaderComponent, PageStateComponent, DoctorFormDrawerComponent
+    FormsModule, RouterLink, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule, NzTableModule,
+    PageHeaderComponent, PageStateComponent, PhonePipe, DoctorFormDrawerComponent
   ],
   template: `
     <section class="da-page">
@@ -50,7 +51,6 @@ import { DoctorFormDrawerComponent } from './doctor-form-drawer.component';
               <tr>
                 <th>Name</th>
                 <th>Specialty</th>
-                @if (clinicOptions.isSuperAdmin()) { <th>Clinic</th> }
                 <th>Phone</th>
                 <th>Email</th>
                 <th nzAlign="right"><span class="sr-only">Actions</span></th>
@@ -61,10 +61,10 @@ import { DoctorFormDrawerComponent } from './doctor-form-drawer.component';
                 <tr>
                   <td><strong>{{ doctor.firstName }} {{ doctor.lastName }}</strong></td>
                   <td>{{ doctor.specialty || '—' }}</td>
-                  @if (clinicOptions.isSuperAdmin()) { <td>{{ clinicOptions.clinicName(doctor.clinicId) }}</td> }
-                  <td class="nowrap">{{ doctor.phone || '—' }}</td>
+                  <td class="nowrap">{{ (doctor.phone | phone) || '—' }}</td>
                   <td>{{ doctor.email || '—' }}</td>
                   <td nzAlign="right" class="nowrap">
+                    <a nz-button nzType="link" routerLink="/doctor-schedules" [queryParams]="{ doctor: doctor.id }">Hours</a>
                     <button nz-button nzType="link" (click)="openForm(doctor)">Edit</button>
                     <button nz-button nzType="link" nzDanger [nzLoading]="deletingId() === doctor.id"
                             nz-popconfirm [nzPopconfirmTitle]="'Delete ' + doctor.firstName + ' ' + doctor.lastName + '?'"
@@ -88,7 +88,6 @@ import { DoctorFormDrawerComponent } from './doctor-form-drawer.component';
 export class DoctorsPageComponent {
   private readonly doctorsService = inject(DoctorsService);
   private readonly messages = inject(NzMessageService);
-  readonly clinicOptions = inject(ClinicOptionsService);
 
   readonly doctors = remoteData<Doctor[]>(() => this.doctorsService.getAll(), []);
   readonly search = signal('');

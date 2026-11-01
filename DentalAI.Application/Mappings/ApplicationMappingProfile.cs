@@ -19,7 +19,8 @@ public sealed class ApplicationMappingProfile : Profile
             .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => $"{src.FirstName} {src.LastName}".Trim()))
             .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role.ToString()))
             .ForMember(dest => dest.ClinicName, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.Name : null))
-            .ForMember(dest => dest.ClinicTimeZone, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.TimeZone : null));
+            .ForMember(dest => dest.ClinicTimeZone, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.TimeZone : null))
+            .ForMember(dest => dest.ClinicCountry, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.Country : null));
 
         CreateMap<Doctor, DoctorDto>()
             .ForMember(dest => dest.ClinicTimeZone, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.TimeZone : null));
@@ -27,7 +28,12 @@ public sealed class ApplicationMappingProfile : Profile
         CreateMap<DentalAI.Domain.Entities.Service, ServiceDto>();
 
         CreateMap<Patient, PatientDto>()
-            .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => $"{src.FirstName} {src.LastName}".Trim()));
+            .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => $"{src.FirstName} {src.LastName}".Trim()))
+            // Rows removed in this request are soft-deleted at save time but still in the collection.
+            .ForMember(dest => dest.Insurances, opt => opt.MapFrom(src =>
+                src.Insurances.Where(i => !i.IsDeleted).OrderBy(i => i.Priority)));
+
+        CreateMap<PatientInsurance, PatientInsuranceDto>();
 
         CreateMap<Appointment, AppointmentDto>()
             .ForMember(dest => dest.PatientName, opt => opt.MapFrom(src =>

@@ -11,7 +11,7 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
 import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { filter, map } from 'rxjs';
-import { USER_ROLE_LABELS, UserRole } from '../core/models/auth.models';
+import { CLINIC_STAFF, USER_ROLE_LABELS, UserRole } from '../core/models/auth.models';
 import { AuthStateService } from '../core/services/auth-state.service';
 import { BookingService } from '../core/services/booking.service';
 import { BookingDrawerComponent } from '../features/appointments/booking-drawer.component';
@@ -21,6 +21,8 @@ interface NavItem {
   label: string;
   path: string;
   icon: string;
+  /** Narrower than the group's roles, e.g. Staff is for clinic admins only. */
+  roles?: UserRole[];
 }
 
 interface NavGroup {
@@ -33,18 +35,20 @@ const NAV_GROUPS: NavGroup[] = [
   { label: 'Overview', items: [{ label: 'Dashboard', path: '/dashboard', icon: 'dashboard' }] },
   {
     label: 'Scheduling',
+    roles: CLINIC_STAFF,
     items: [
-      { label: 'Calendar', path: '/calendar', icon: 'schedule' },
       { label: 'Appointments', path: '/appointments', icon: 'calendar' },
       { label: 'Doctor schedules', path: '/doctor-schedules', icon: 'clock-circle' }
     ]
   },
   {
     label: 'Clinic',
+    roles: CLINIC_STAFF,
     items: [
       { label: 'Patients', path: '/patients', icon: 'solution' },
       { label: 'Doctors', path: '/doctors', icon: 'team' },
-      { label: 'Services', path: '/services', icon: 'medicine-box' }
+      { label: 'Services', path: '/services', icon: 'medicine-box' },
+      { label: 'Staff', path: '/staff', icon: 'user', roles: ['ClinicAdmin'] }
     ]
   },
   { label: 'Platform', roles: ['SuperAdmin'], items: [{ label: 'Clinics', path: '/clinics', icon: 'bank' }] }
@@ -129,9 +133,11 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
           </div>
 
           <div class="shell__actions">
-            <button nz-button nzType="primary" (click)="booking.open()" aria-label="New appointment">
-              <span nz-icon nzType="plus"></span><span class="shell__action-text">New appointment</span>
-            </button>
+            @if (isClinicStaff()) {
+              <button nz-button nzType="primary" (click)="booking.open()" aria-label="New appointment">
+                <span nz-icon nzType="plus"></span><span class="shell__action-text">New appointment</span>
+              </button>
+            }
 
             <button class="user" nz-dropdown [nzDropdownMenu]="userMenu" nzTrigger="click" nzPlacement="bottomRight"
                     aria-label="Account menu">
@@ -158,7 +164,7 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
       </nz-layout>
     </nz-layout>
 
-    <app-booking-drawer />
+    @if (isClinicStaff()) { <app-booking-drawer /> }
   `,
   styles: [`
     :host { display: block; }
@@ -232,13 +238,19 @@ export class AppShellComponent {
 
   readonly navGroups = computed(() => {
     const role = this.authState.role();
-    return NAV_GROUPS.filter((group) => !group.roles || (role !== null && group.roles.includes(role)));
+    const allowed = (roles?: UserRole[]) => !roles || (role !== null && roles.includes(role));
+    return NAV_GROUPS
+      .filter((group) => allowed(group.roles))
+      .map((group) => ({ ...group, items: group.items.filter((item) => allowed(item.roles)) }))
+      .filter((group) => group.items.length);
   });
+
+  readonly isClinicStaff = computed(() => this.authState.hasAnyRole(CLINIC_STAFF));
 
   readonly clinicName = computed(() => {
     const user = this.authState.user();
     if (!user) return '';
-    return user.clinicName ?? (user.role === 'SuperAdmin' ? 'All clinics' : 'Your clinic');
+    return user.clinicName ?? (user.role === 'SuperAdmin' ? 'DentalAI platform' : 'Your clinic');
   });
 
   readonly clinicTimeZone = computed(() => timeZoneLabel(this.authState.user()?.clinicTimeZone));

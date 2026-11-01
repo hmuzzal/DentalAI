@@ -24,6 +24,13 @@ export class PatientsService {
       .pipe(map((response) => response.data));
   }
 
+  /** The full record, including insurance (lists leave it out). */
+  getById(id: string): Observable<Patient> {
+    return this.http
+      .get<ApiResponse<Patient>>(`${this.apiBaseUrl}/patients/${id}`)
+      .pipe(map((response) => response.data));
+  }
+
   /** Server-side search (name, phone or email) and paging. */
   search(query: PatientSearch): Observable<PagedResult<Patient>> {
     let params = new HttpParams().set('page', query.page).set('pageSize', query.pageSize);

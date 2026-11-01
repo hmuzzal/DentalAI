@@ -14,15 +14,8 @@ public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor)
 
     public bool IsInRole(UserRole role) => httpContextAccessor.HttpContext?.User.IsInRole(role.ToString()) ?? false;
 
-    public bool CanAccessClinic(Guid? clinicId)
-    {
-        if (IsSuperAdmin)
-        {
-            return true;
-        }
-
-        return clinicId.HasValue && ClinicId == clinicId;
-    }
+    /// <summary>True only for the user's own clinic. Platform admins have no clinic, so this is always false for them.</summary>
+    public bool CanAccessClinic(Guid? clinicId) => clinicId.HasValue && ClinicId == clinicId;
 
     private Guid? TryParseGuid(string claimType)
     {

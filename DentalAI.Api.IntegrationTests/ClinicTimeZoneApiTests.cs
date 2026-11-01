@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using DentalAI.Api.IntegrationTests.Infrastructure;
+using DentalAI.Application.Common.Interfaces;
 using DentalAI.Domain.Entities;
+using DentalAI.Domain.Enums;
 using DentalAI.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -70,7 +72,7 @@ public sealed class ClinicTimeZoneApiTests(ApiFactory factory) : IAsyncLifetime
         var setup = await SeedNewYorkClinicAsync(intervalMinutes: 20, new TimeOnly(9, 0), new TimeOnly(10, 0));
         var date = new DateOnly(2027, 6, 7);
 
-        var slots = await _superAdmin.GetSlotsAsync(setup.DoctorId, setup.ServiceId, date);
+        var slots = await setup.Staff.GetSlotsAsync(setup.DoctorId, setup.ServiceId, date);
 
         // 09:00 EDT = 13:00Z; a 30-minute service on a 20-minute grid fits at 09:00 and 09:20.
         Assert.Equal([Utc(2027, 6, 7, 13, 0), Utc(2027, 6, 7, 13, 20)], slots.Select(x => x.StartTimeUtc));
@@ -82,14 +84,14 @@ public sealed class ClinicTimeZoneApiTests(ApiFactory factory) : IAsyncLifetime
     {
         var setup = await SeedNewYorkClinicAsync(intervalMinutes: 30, new TimeOnly(1, 0), new TimeOnly(4, 0));
 
-        var slots = await _superAdmin.GetSlotsAsync(setup.DoctorId, setup.ServiceId, SpringForward);
+        var slots = await setup.Staff.GetSlotsAsync(setup.DoctorId, setup.ServiceId, SpringForward);
 
         // 01:00 and 01:30 EST, then 03:00 and 03:30 EDT. 02:00–02:59 does not exist that day.
         Assert.Equal(
             [Utc(2027, 3, 14, 6, 0), Utc(2027, 3, 14, 6, 30), Utc(2027, 3, 14, 7, 0), Utc(2027, 3, 14, 7, 30)],
             slots.Select(x => x.StartTimeUtc));
 
-        var booked = await _superAdmin.BookAsync(setup.DoctorId, setup.ServiceId, setup.PatientId, Utc(2027, 3, 14, 7, 0));
+        var booked = await setup.Staff.BookAsync(setup.DoctorId, setup.ServiceId, setup.PatientId, Utc(2027, 3, 14, 7, 0));
         Assert.Equal(HttpStatusCode.OK, booked.StatusCode);
     }
 
@@ -98,7 +100,7 @@ public sealed class ClinicTimeZoneApiTests(ApiFactory factory) : IAsyncLifetime
     {
         var setup = await SeedNewYorkClinicAsync(intervalMinutes: 30, new TimeOnly(0, 0), new TimeOnly(3, 0));
 
-        var slots = await _superAdmin.GetSlotsAsync(setup.DoctorId, setup.ServiceId, FallBack);
+        var slots = await setup.Staff.GetSlotsAsync(setup.DoctorId, setup.ServiceId, FallBack);
 
         // 00:00, 00:30 EDT; 01:00, 01:30 first occurrence (EDT); then 02:00, 02:30 EST. 06:00Z–07:00Z is the
         // repeated 01:xx (EST) hour, which is never offered.
@@ -108,12 +110,13 @@ public sealed class ClinicTimeZoneApiTests(ApiFactory factory) : IAsyncLifetime
             slots.Select(x => x.StartTimeUtc));
 
         Assert.Equal(HttpStatusCode.OK,
-            (await _superAdmin.BookAsync(setup.DoctorId, setup.ServiceId, setup.PatientId, Utc(2027, 11, 7, 5, 30))).StatusCode);
+            (await setup.Staff.BookAsync(setup.DoctorId, setup.ServiceId, setup.PatientId, Utc(2027, 11, 7, 5, 30))).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict,
-            (await _superAdmin.BookAsync(setup.DoctorId, setup.ServiceId, setup.PatientId, Utc(2027, 11, 7, 5, 45))).StatusCode);
+            (await setup.Staff.BookAsync(setup.DoctorId, setup.ServiceId, setup.PatientId, Utc(2027, 11, 7, 5, 45))).StatusCode);
     }
 
-    private sealed record Setup(Guid DoctorId, Guid ServiceId, Guid PatientId);
+    /// <summary>A seeded New York clinic, plus an API client signed in as that clinic's admin.</summary>
+    private sealed record Setup(SchedulingApi Staff, Guid DoctorId, Guid ServiceId, Guid PatientId);
 
     /// <summary>A New York clinic with one doctor (same hours every day), a 30-minute service and a patient.</summary>
     private async Task<Setup> SeedNewYorkClinicAsync(int intervalMinutes, TimeOnly from, TimeOnly to)
@@ -134,15 +137,24 @@ public sealed class ClinicTimeZoneApiTests(ApiFactory factory) : IAsyncLifetime
         var service = new Service { ClinicId = clinic.Id, Name = "Cleaning", Price = 80m, DurationMinutes = 30, IsActive = true };
         var patient = new Patient { ClinicId = clinic.Id, FirstName = "Test", LastName = "Patient", Phone = "+1 212 555 0102" };
 
+        // Clinic data is for clinic staff only, so each test signs in as this clinic's own admin.
+        const string password = "NyAdmin123!";
+        var admin = new User
+        {
+            ClinicId = clinic.Id, FirstName = "NY", LastName = "Admin", Email = $"ny.admin.{Guid.NewGuid():N}@test.local",
+            PasswordHash = scope.ServiceProvider.GetRequiredService<IPasswordHasher>().Hash(password),
+            Role = UserRole.ClinicAdmin, IsActive = true
+        };
+
         db.Add(clinic);
-        db.AddRange(doctor, service, patient);
+        db.AddRange(admin, doctor, service, patient);
         db.AddRange(Enum.GetValues<DayOfWeek>().Select(day => new DoctorSchedule
         {
             ClinicId = clinic.Id, DoctorId = doctor.Id, DayOfWeek = day, StartTime = from, EndTime = to, IsWorking = true
         }));
         await db.SaveChangesAsync();
 
-        return new Setup(doctor.Id, service.Id, patient.Id);
+        return new Setup(await SchedulingApi.SignInAsync(factory, admin.Email, password), doctor.Id, service.Id, patient.Id);
     }
 
     private static object ClinicRequest(string zone, int interval) => new

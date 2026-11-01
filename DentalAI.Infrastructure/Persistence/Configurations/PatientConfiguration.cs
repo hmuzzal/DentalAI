@@ -15,6 +15,15 @@ public sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
         builder.Property(x => x.Email).HasMaxLength(200);
         builder.Property(x => x.Gender).HasMaxLength(30);
         builder.Property(x => x.Notes).HasMaxLength(2000);
+        builder.Property(x => x.AddressLine1).HasMaxLength(200);
+        builder.Property(x => x.AddressLine2).HasMaxLength(200);
+        builder.Property(x => x.City).HasMaxLength(100);
+        builder.Property(x => x.State).HasMaxLength(50);
+        builder.Property(x => x.PostalCode).HasMaxLength(20);
+        builder.Property(x => x.PreferredContactMethod).HasConversion<string>().HasMaxLength(20)
+            .HasDefaultValue(DentalAI.Domain.Enums.ContactMethod.Phone);
+        builder.Property(x => x.SmsOptInAtUtc).HasColumnType("datetime2");
+        builder.Property(x => x.SmsOptOutAtUtc).HasColumnType("datetime2");
         builder.Property(x => x.CreatedDate).HasColumnType("datetime2");
         builder.Property(x => x.UpdatedDate).HasColumnType("datetime2");
 

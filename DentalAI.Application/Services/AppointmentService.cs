@@ -22,7 +22,7 @@ public sealed class AppointmentService(
 {
     public async Task<Result<IReadOnlyList<AppointmentDto>>> ListAsync(CancellationToken cancellationToken)
     {
-        var clinicId = currentUserService.IsSuperAdmin ? null : currentUserService.ClinicId;
+        var clinicId = currentUserService.ClinicId;
         var appointments = await appointmentRepository.ListAsync(clinicId, cancellationToken);
         return Result<IReadOnlyList<AppointmentDto>>.Ok(mapper.Map<IReadOnlyList<AppointmentDto>>(appointments));
     }

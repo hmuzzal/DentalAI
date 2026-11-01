@@ -12,7 +12,6 @@ import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { finalize } from 'rxjs';
 import { DentalService } from '../../core/models/service.models';
-import { ClinicOptionsService } from '../../core/services/clinic-options.service';
 import { ServicesCatalogService } from '../../core/services/services-catalog.service';
 import { matchesSearch } from '../../shared/forms';
 import { PageHeaderComponent } from '../../shared/page-header.component';
@@ -57,7 +56,6 @@ type StatusFilter = 'All' | 'Active' | 'Inactive';
             <thead>
               <tr>
                 <th>Name</th>
-                @if (clinicOptions.isSuperAdmin()) { <th>Clinic</th> }
                 <th nzAlign="right">Duration</th>
                 <th nzAlign="right">Price</th>
                 <th>Status</th>
@@ -71,7 +69,6 @@ type StatusFilter = 'All' | 'Active' | 'Inactive';
                     <strong>{{ service.name }}</strong>
                     @if (service.description) { <div class="muted">{{ service.description }}</div> }
                   </td>
-                  @if (clinicOptions.isSuperAdmin()) { <td>{{ clinicOptions.clinicName(service.clinicId) }}</td> }
                   <td nzAlign="right" class="num nowrap">{{ service.durationMinutes }} min</td>
                   <td nzAlign="right" class="num">{{ service.price | currency: 'USD' }}</td>
                   <td>
@@ -103,7 +100,6 @@ type StatusFilter = 'All' | 'Active' | 'Inactive';
 export class ServicesPageComponent {
   private readonly servicesCatalog = inject(ServicesCatalogService);
   private readonly messages = inject(NzMessageService);
-  readonly clinicOptions = inject(ClinicOptionsService);
 
   readonly services = remoteData<DentalService[]>(() => this.servicesCatalog.getAll(), []);
   readonly statusOptions: StatusFilter[] = ['All', 'Active', 'Inactive'];

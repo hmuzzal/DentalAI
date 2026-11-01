@@ -25,14 +25,15 @@ public sealed class ManagementApiTests(ApiFactory factory) : IAsyncLifetime
         var tag = $"Zq{Guid.NewGuid():N}"[..10]; // a last name no other test uses
         for (var i = 0; i < 5; i++)
         {
-            await CreatePatientAsync($"Anna{i}", tag, $"+1 555 020 01{i:00}");
+            await CreatePatientAsync($"Anna{i}", tag, $"+1 646 555 01{i:00}");
         }
-        await CreatePatientAsync("Bob", tag, "+1 555 020 0199");
+        await CreatePatientAsync("Bob", tag, "+1 646 555 0199");
 
         var firstPage = await SearchAsync(tag, page: 1, pageSize: 4);
         var secondPage = await SearchAsync(tag, page: 2, pageSize: 4);
         var twoWords = await SearchAsync($"bob {tag}");
-        var byPhone = await SearchAsync("555 020 0199");
+        // Typed the way people write US numbers; stored as +16465550199.
+        var byPhone = await SearchAsync("(646) 555-0199");
 
         Assert.Equal(6, firstPage.TotalCount);
         Assert.Equal(4, firstPage.Items.Count);
@@ -49,21 +50,6 @@ public sealed class ManagementApiTests(ApiFactory factory) : IAsyncLifetime
 
         Assert.Equal(1, page.Page);
         Assert.Equal(100, page.PageSize);
-    }
-
-    [Fact]
-    public async Task SuperAdmin_CreatesAServiceInTheChosenClinic()
-    {
-        var superAdmin = await SchedulingApi.SignInAsync(factory, "superadmin@dentalai.local", "SuperAdmin123!");
-
-        var withoutClinic = await superAdmin.Http.PostAsJsonAsync("/api/services",
-            new { name = "Whitening", price = 200m, durationMinutes = 60, isActive = true }, SchedulingApi.Json);
-        var created = await SchedulingApi.ReadAsync<ServiceRow>(await superAdmin.Http.PostAsJsonAsync("/api/services",
-            new { clinicId = SchedulingApi.ClinicId, name = "Whitening", price = 200m, durationMinutes = 60, isActive = true },
-            SchedulingApi.Json));
-
-        Assert.Equal(HttpStatusCode.BadRequest, withoutClinic.StatusCode);
-        Assert.Equal(SchedulingApi.ClinicId, created.ClinicId);
     }
 
     [Fact]

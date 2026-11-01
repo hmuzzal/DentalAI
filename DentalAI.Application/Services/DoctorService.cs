@@ -2,6 +2,7 @@ using AutoMapper;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
+using DentalAI.Application.Common.Phone;
 using DentalAI.Application.DTOs.Doctors;
 using DentalAI.Application.Interfaces;
 using DentalAI.Domain.Entities;
@@ -17,9 +18,9 @@ public sealed class DoctorService(
     IUnitOfWork unitOfWork,
     IMapper mapper) : IDoctorService
 {
-    public async Task<Result<IReadOnlyList<DoctorDto>>> ListAsync(Guid? clinicId, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<DoctorDto>>> ListAsync(CancellationToken cancellationToken)
     {
-        var effectiveClinicId = ResolveClinicId(clinicId);
+        var effectiveClinicId = OwnClinicId;
         var doctors = await doctorRepository.ListAsync(effectiveClinicId, cancellationToken);
         return Result<IReadOnlyList<DoctorDto>>.Ok(mapper.Map<IReadOnlyList<DoctorDto>>(doctors));
     }
@@ -34,7 +35,7 @@ public sealed class DoctorService(
 
     public async Task<Result<DoctorDto>> CreateAsync(CreateDoctorDto request, CancellationToken cancellationToken)
     {
-        var effectiveClinicId = ResolveClinicId(request.ClinicId);
+        var effectiveClinicId = OwnClinicId;
         if (!effectiveClinicId.HasValue)
         {
             return Result<DoctorDto>.Fail(ResultStatus.Forbidden, "Clinic context is required.");
@@ -46,13 +47,18 @@ public sealed class DoctorService(
             return Result<DoctorDto>.Fail(ResultStatus.NotFound, "Clinic was not found.");
         }
 
+        if (!PhoneNumberRules.TryNormalize(request.Phone, clinic.Country, out var phone))
+        {
+            return Result<DoctorDto>.Fail(ResultStatus.ValidationError, "The phone number is not valid.", [PhoneNumberRules.InvalidMessage(clinic.Country)]);
+        }
+
         var doctor = new Doctor
         {
             ClinicId = effectiveClinicId.Value,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             Specialty = request.Specialty.Trim(),
-            Phone = request.Phone.Trim(),
+            Phone = phone,
             Email = request.Email.Trim().ToLowerInvariant()
         };
 
@@ -70,7 +76,7 @@ public sealed class DoctorService(
             return Result<DoctorDto>.Fail(ResultStatus.NotFound, "Doctor was not found.");
         }
 
-        var effectiveClinicId = ResolveClinicId(request.ClinicId);
+        var effectiveClinicId = OwnClinicId;
         if (!effectiveClinicId.HasValue)
         {
             return Result<DoctorDto>.Fail(ResultStatus.Forbidden, "Clinic context is required.");
@@ -82,11 +88,16 @@ public sealed class DoctorService(
             return Result<DoctorDto>.Fail(ResultStatus.NotFound, "Clinic was not found.");
         }
 
+        if (!PhoneNumberRules.TryNormalize(request.Phone, clinic.Country, out var phone))
+        {
+            return Result<DoctorDto>.Fail(ResultStatus.ValidationError, "The phone number is not valid.", [PhoneNumberRules.InvalidMessage(clinic.Country)]);
+        }
+
         doctor.ClinicId = effectiveClinicId.Value;
         doctor.FirstName = request.FirstName.Trim();
         doctor.LastName = request.LastName.Trim();
         doctor.Specialty = request.Specialty.Trim();
-        doctor.Phone = request.Phone.Trim();
+        doctor.Phone = phone;
         doctor.Email = request.Email.Trim().ToLowerInvariant();
 
         doctorRepository.Update(doctor);
@@ -116,13 +127,6 @@ public sealed class DoctorService(
         return Result.Ok("Doctor deleted successfully.");
     }
 
-    private Guid? ResolveClinicId(Guid? requestedClinicId)
-    {
-        if (currentUserService.IsInRole(Domain.Enums.UserRole.SuperAdmin))
-        {
-            return requestedClinicId;
-        }
-
-        return currentUserService.ClinicId;
-    }
+    /// <summary>Clinic data is always the signed-in user's own clinic (platform admins have none).</summary>
+    private Guid? OwnClinicId => currentUserService.ClinicId;
 }

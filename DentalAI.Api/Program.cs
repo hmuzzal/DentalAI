@@ -142,10 +142,11 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(UserRole.SuperAdmin.ToString()));
 
     options.AddPolicy(AuthorizationPolicies.ClinicAdminOnly, policy =>
-        policy.RequireRole(UserRole.SuperAdmin.ToString(), UserRole.ClinicAdmin.ToString()));
+        policy.RequireRole(UserRole.ClinicAdmin.ToString()));
 
-    options.AddPolicy(AuthorizationPolicies.ReceptionistAccess, policy =>
-        policy.RequireRole(UserRole.SuperAdmin.ToString(), UserRole.ClinicAdmin.ToString(), UserRole.Receptionist.ToString()));
+    // Clinic data: clinic staff only. Platform admins are deliberately excluded.
+    options.AddPolicy(AuthorizationPolicies.ClinicStaff, policy =>
+        policy.RequireRole(UserRole.ClinicAdmin.ToString(), UserRole.Receptionist.ToString()));
 });
 
 var allowedCorsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()

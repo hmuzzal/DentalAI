@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalAI.Api.Controllers;
 
-[Authorize(Policy = Infrastructure.AuthorizationPolicies.ReceptionistAccess)]
+[Authorize(Policy = Infrastructure.AuthorizationPolicies.ClinicStaff)]
 public sealed class CalendarController(ICalendarService calendarService) : ApiControllerBase
 {
     [HttpGet("day")]

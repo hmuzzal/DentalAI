@@ -2,7 +2,8 @@ using DentalAI.Domain.Enums;
 
 namespace DentalAI.Application.DTOs.Calendar;
 
-public sealed record CalendarQuery(Guid? ClinicId, Guid? DoctorId, DateOnly Date);
+/// <summary>Always the signed-in user's own clinic.</summary>
+public sealed record CalendarQuery(Guid? DoctorId, DateOnly Date);
 
 public sealed record CalendarAppointmentDto(
     Guid Id,

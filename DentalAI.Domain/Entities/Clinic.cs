@@ -9,6 +9,8 @@ public sealed class Clinic : BaseEntity
     public string Email { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string TimeZone { get; set; } = string.Empty;
+    /// <summary>ISO 3166-1 alpha-2 code, e.g. "US". Sets the default region for phone numbers.</summary>
+    public string Country { get; set; } = "US";
     public int SlotIntervalMinutes { get; set; } = 15;
 
     public ICollection<User> Users { get; set; } = new List<User>();

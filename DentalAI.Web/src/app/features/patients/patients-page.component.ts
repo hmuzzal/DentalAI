@@ -12,9 +12,9 @@ import { NzTableModule } from 'ng-zorro-antd/table';
 import { catchError, debounceTime, distinctUntilChanged, finalize, map, of, Subject, switchMap, tap } from 'rxjs';
 import { PagedResult } from '../../core/models/api-response.model';
 import { Patient } from '../../core/models/patient.models';
-import { ClinicOptionsService } from '../../core/services/clinic-options.service';
 import { PatientsService } from '../../core/services/patients.service';
 import { PageHeaderComponent } from '../../shared/page-header.component';
+import { PhonePipe } from '../../shared/phone.pipe';
 import { PageStateComponent } from '../../shared/page-state.component';
 import { LoadStatus } from '../../shared/remote-data';
 import { PatientFormDrawerComponent } from './patient-form-drawer.component';
@@ -33,7 +33,7 @@ interface Query {
   standalone: true,
   imports: [
     DatePipe, FormsModule, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule,
-    NzTableModule, PageHeaderComponent, PageStateComponent, PatientFormDrawerComponent
+    NzTableModule, PageHeaderComponent, PageStateComponent, PhonePipe, PatientFormDrawerComponent
   ],
   template: `
     <section class="da-page">
@@ -63,7 +63,6 @@ interface Query {
             <thead>
               <tr>
                 <th>Name</th>
-                @if (clinicOptions.isSuperAdmin()) { <th>Clinic</th> }
                 <th>Phone</th>
                 <th>Email</th>
                 <th>Date of birth</th>
@@ -77,8 +76,7 @@ interface Query {
                     <strong>{{ patient.fullName }}</strong>
                     @if (patient.gender) { <div class="muted">{{ patient.gender }}</div> }
                   </td>
-                  @if (clinicOptions.isSuperAdmin()) { <td>{{ clinicOptions.clinicName(patient.clinicId) }}</td> }
-                  <td class="nowrap">{{ patient.phone || '—' }}</td>
+                  <td class="nowrap">{{ (patient.phone | phone) || '—' }}</td>
                   <td>{{ patient.email || '—' }}</td>
                   <td class="nowrap num">{{ patient.dateOfBirth ? (patient.dateOfBirth | date: 'MM/dd/yyyy' : 'UTC') : '—' }}</td>
                   <td nzAlign="right" class="nowrap">
@@ -105,7 +103,6 @@ interface Query {
 export class PatientsPageComponent {
   private readonly patientsService = inject(PatientsService);
   private readonly messages = inject(NzMessageService);
-  readonly clinicOptions = inject(ClinicOptionsService);
 
   readonly query = signal<Query>({ search: '', page: 1, pageSize: 20, version: 0 });
   readonly result = signal<PagedResult<Patient>>({ items: [], totalCount: 0, page: 1, pageSize: 20 });

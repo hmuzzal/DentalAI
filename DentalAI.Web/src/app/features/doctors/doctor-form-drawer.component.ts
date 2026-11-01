@@ -7,10 +7,11 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { finalize } from 'rxjs';
 import { Doctor, DoctorRequest } from '../../core/models/doctor.models';
-import { ClinicOptionsService } from '../../core/services/clinic-options.service';
+import { AuthStateService } from '../../core/services/auth-state.service';
 import { DoctorsService } from '../../core/services/doctors.service';
 import { FormDrawerComponent } from '../../shared/form-drawer.component';
 import { PHONE_PATTERN, saveErrorText, touchAll } from '../../shared/forms';
+import { formatPhone, phoneCountryHint } from '../../shared/phone.pipe';
 
 const SPECIALTIES = [
   'General Dentist', 'Dental Hygienist', 'Orthodontist', 'Endodontist', 'Periodontist',
@@ -27,19 +28,6 @@ const SPECIALTIES = [
                      [submitLabel]="doctor() ? 'Save changes' : 'Add doctor'" [saving]="saving()" [error]="error()"
                      (closed)="closed.emit()" (submitted)="save()">
       <form nz-form nzLayout="vertical" [formGroup]="form" (ngSubmit)="save()">
-        @if (clinicOptions.isSuperAdmin()) {
-          <nz-form-item>
-            <nz-form-label nzRequired nzFor="doctor-clinic">Clinic</nz-form-label>
-            <nz-form-control nzErrorTip="Choose the doctor's clinic.">
-              <nz-select nzId="doctor-clinic" formControlName="clinicId" nzShowSearch nzPlaceHolder="Select a clinic"
-                         [nzLoading]="!clinicOptions.clinics().length">
-                @for (clinic of clinicOptions.clinics(); track clinic.id) {
-                  <nz-option [nzValue]="clinic.id" [nzLabel]="clinic.name" />
-                }
-              </nz-select>
-            </nz-form-control>
-          </nz-form-item>
-        }
 
         <div class="row">
           <nz-form-item>
@@ -77,7 +65,7 @@ const SPECIALTIES = [
 
         <nz-form-item>
           <nz-form-label nzRequired nzFor="doctor-phone">Phone</nz-form-label>
-          <nz-form-control nzErrorTip="Enter a phone number, e.g. +1 212 555 0100.">
+          <nz-form-control nzErrorTip="Enter a phone number, e.g. (212) 555-0142." [nzExtra]="phoneHint()">
             <input nz-input id="doctor-phone" type="tel" formControlName="phone" autocomplete="tel" />
           </nz-form-control>
         </nz-form-item>
@@ -95,15 +83,14 @@ export class DoctorFormDrawerComponent {
   readonly closed = output<void>();
   readonly saved = output<Doctor>();
 
-  readonly clinicOptions = inject(ClinicOptionsService);
   private readonly doctorsService = inject(DoctorsService);
   private readonly messages = inject(NzMessageService);
+  private readonly auth = inject(AuthStateService);
 
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
 
   readonly form = inject(NonNullableFormBuilder).group({
-    clinicId: [''],
     firstName: ['', [Validators.required, Validators.maxLength(100)]],
     lastName: ['', [Validators.required, Validators.maxLength(100)]],
     specialty: ['', [Validators.required, Validators.maxLength(150)]],
@@ -112,6 +99,9 @@ export class DoctorFormDrawerComponent {
   });
 
   private readonly specialtyText = signal('');
+  /** Which country numbers without +code are read as (the user's clinic's). */
+  readonly phoneHint = computed(() => phoneCountryHint(this.auth.user()?.clinicCountry));
+
   readonly specialtyOptions = computed(() => {
     const text = this.specialtyText().toLowerCase();
     return SPECIALTIES.filter((s) => s.toLowerCase().includes(text));
@@ -123,18 +113,14 @@ export class DoctorFormDrawerComponent {
     effect(() => {
       if (!this.open()) return;
       const doctor = this.doctor();
-      const superAdmin = this.clinicOptions.isSuperAdmin();
       untracked(() => {
         this.error.set(null);
-        const clinicId = this.form.controls.clinicId;
-        clinicId.setValidators(superAdmin ? Validators.required : null);
         this.form.reset({
-          clinicId: doctor?.clinicId ?? '',
           firstName: doctor?.firstName ?? '',
           lastName: doctor?.lastName ?? '',
           specialty: doctor?.specialty ?? '',
           email: doctor?.email ?? '',
-          phone: doctor?.phone ?? ''
+          phone: formatPhone(doctor?.phone)
         });
       });
     });
@@ -149,7 +135,6 @@ export class DoctorFormDrawerComponent {
 
     const value = this.form.getRawValue();
     const request: DoctorRequest = {
-      clinicId: value.clinicId || null,
       firstName: value.firstName.trim(),
       lastName: value.lastName.trim(),
       specialty: value.specialty.trim(),

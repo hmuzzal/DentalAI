@@ -1,6 +1,7 @@
 using AutoMapper;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
+using DentalAI.Application.Common.Phone;
 using DentalAI.Application.DTOs.Clinics;
 using DentalAI.Application.Interfaces;
 using DentalAI.Domain.Entities;
@@ -9,6 +10,7 @@ namespace DentalAI.Application.Services;
 
 public sealed class ClinicService(
     IClinicRepository clinicRepository,
+    IUserRepository userRepository,
     IUnitOfWork unitOfWork,
     IMapper mapper) : IClinicService
 {
@@ -34,10 +36,17 @@ public sealed class ClinicService(
             return Result<ClinicDto>.Fail(ResultStatus.Conflict, "A clinic with this name already exists.");
         }
 
+        var country = request.Country.Trim().ToUpperInvariant();
+        if (!PhoneNumberRules.TryNormalize(request.Phone, country, out var phone))
+        {
+            return Result<ClinicDto>.Fail(ResultStatus.ValidationError, "The phone number is not valid.", [PhoneNumberRules.InvalidMessage(country)]);
+        }
+
         var clinic = new Clinic
         {
             Name = request.Name.Trim(),
-            Phone = request.Phone.Trim(),
+            Phone = phone,
+            Country = country,
             Email = request.Email.Trim().ToLowerInvariant(),
             Address = request.Address.Trim(),
             TimeZone = request.TimeZone.Trim(),
@@ -64,8 +73,15 @@ public sealed class ClinicService(
             return Result<ClinicDto>.Fail(ResultStatus.Conflict, "A clinic with this name already exists.");
         }
 
+        var country = request.Country.Trim().ToUpperInvariant();
+        if (!PhoneNumberRules.TryNormalize(request.Phone, country, out var phone))
+        {
+            return Result<ClinicDto>.Fail(ResultStatus.ValidationError, "The phone number is not valid.", [PhoneNumberRules.InvalidMessage(country)]);
+        }
+
         clinic.Name = request.Name.Trim();
-        clinic.Phone = request.Phone.Trim();
+        clinic.Phone = phone;
+        clinic.Country = country;
         clinic.Email = request.Email.Trim().ToLowerInvariant();
         clinic.Address = request.Address.Trim();
         clinic.TimeZone = request.TimeZone.Trim();
@@ -83,6 +99,17 @@ public sealed class ClinicService(
         if (clinic is null)
         {
             return Result.Fail(ResultStatus.NotFound, "Clinic was not found.");
+        }
+
+        // Close the clinic and lock out its staff: deactivate every account and end their sessions. (Sign-in also
+        // refuses staff of a deleted clinic, so this holds even for accounts added later by mistake.)
+        foreach (var user in await userRepository.ListByClinicAsync(clinic.Id, cancellationToken))
+        {
+            user.IsActive = false;
+            user.RefreshToken = null;
+            user.RefreshTokenExpiry = null;
+            user.InviteTokenHash = null;
+            user.InviteExpiresAtUtc = null;
         }
 
         clinic.IsDeleted = true;

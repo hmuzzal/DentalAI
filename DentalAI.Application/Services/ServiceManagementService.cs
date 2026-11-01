@@ -30,12 +30,10 @@ public sealed class ServiceManagementService(
 
     public async Task<Result<ServiceDto>> CreateAsync(UpsertServiceRequest request, CancellationToken cancellationToken)
     {
-        var clinicId = currentUserService.IsSuperAdmin ? request.ClinicId : currentUserService.ClinicId;
+        var clinicId = currentUserService.ClinicId;
         if (!clinicId.HasValue)
         {
-            return currentUserService.IsSuperAdmin
-                ? Result<ServiceDto>.Fail(ResultStatus.ValidationError, "Choose the clinic for this service.")
-                : Result<ServiceDto>.Fail(ResultStatus.Forbidden, "Clinic context is required.");
+            return Result<ServiceDto>.Fail(ResultStatus.Forbidden, "Clinic context is required.");
         }
 
         if (await clinicRepository.GetByIdAsync(clinicId.Value, cancellationToken) is null)

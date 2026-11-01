@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalAI.Api.Controllers;
 
-[Authorize(Policy = Infrastructure.AuthorizationPolicies.ReceptionistAccess)]
+[Authorize(Policy = Infrastructure.AuthorizationPolicies.ClinicStaff)]
 public sealed class DashboardController(IDashboardService dashboardService) : ApiControllerBase
 {
     [HttpGet("stats")]

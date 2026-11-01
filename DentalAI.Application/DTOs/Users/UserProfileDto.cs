@@ -12,4 +12,6 @@ public sealed class UserProfileDto
     public bool IsActive { get; set; }
     public string? ClinicName { get; set; }
     public string? ClinicTimeZone { get; set; }
+    /// <summary>ISO 3166-1 alpha-2 country of the user's clinic; phone numbers without a country code are read as this.</summary>
+    public string? ClinicCountry { get; set; }
 }

@@ -5,12 +5,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalAI.Api.Controllers;
 
-[Authorize(Policy = Infrastructure.AuthorizationPolicies.ReceptionistAccess)]
+[Authorize(Policy = Infrastructure.AuthorizationPolicies.ClinicStaff)]
 public sealed class PatientsController(IPatientService patientService) : ApiControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] Guid? clinicId, CancellationToken cancellationToken) =>
-        HandleResult(await patientService.ListAsync(clinicId, cancellationToken));
+    public async Task<IActionResult> GetAll(CancellationToken cancellationToken) =>
+        HandleResult(await patientService.ListAsync(cancellationToken));
 
     /// <summary>Paged patient search by name, phone or email.</summary>
     [HttpGet("search")]

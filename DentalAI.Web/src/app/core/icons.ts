@@ -5,10 +5,12 @@ import {
   CheckOutline,
   ClockCircleOutline,
   CloseCircleFill,
+  CloseOutline,
   DashboardOutline,
   DownOutline,
   ExclamationCircleFill,
   GlobalOutline,
+  LeftOutline,
   LogoutOutline,
   MedicineBoxOutline,
   MenuFoldOutline,
@@ -16,12 +18,15 @@ import {
   MenuUnfoldOutline,
   PlusOutline,
   ReloadOutline,
+  RightOutline,
   ScheduleOutline,
   SearchOutline,
   SolutionOutline,
   TableOutline,
   TeamOutline,
-  UpOutline
+  UnorderedListOutline,
+  UpOutline,
+  UserOutline
 } from '@ant-design/icons-angular/icons';
 
 /**
@@ -37,10 +42,12 @@ export const APP_ICONS = [
   CheckOutline,
   ClockCircleOutline,
   CloseCircleFill,
+  CloseOutline,
   DashboardOutline,
   DownOutline,
   ExclamationCircleFill,
   GlobalOutline,
+  LeftOutline,
   LogoutOutline,
   MedicineBoxOutline,
   MenuFoldOutline,
@@ -48,10 +55,13 @@ export const APP_ICONS = [
   MenuUnfoldOutline,
   PlusOutline,
   ReloadOutline,
+  RightOutline,
   ScheduleOutline,
   SearchOutline,
   SolutionOutline,
   TableOutline,
   TeamOutline,
-  UpOutline
+  UnorderedListOutline,
+  UpOutline,
+  UserOutline
 ];

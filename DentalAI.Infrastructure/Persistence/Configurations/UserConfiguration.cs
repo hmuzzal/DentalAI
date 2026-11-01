@@ -15,12 +15,15 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.PasswordHash).HasMaxLength(500).IsRequired();
         builder.Property(x => x.RefreshToken).HasMaxLength(200);
         builder.Property(x => x.RefreshTokenExpiry).HasColumnType("datetime2");
+        builder.Property(x => x.InviteTokenHash).HasMaxLength(64);
+        builder.Property(x => x.InviteExpiresAtUtc).HasColumnType("datetime2");
         builder.Property(x => x.Role).HasConversion<string>().HasMaxLength(50);
         builder.Property(x => x.CreatedDate).HasColumnType("datetime2");
         builder.Property(x => x.UpdatedDate).HasColumnType("datetime2");
 
         builder.HasIndex(x => x.Email).IsUnique();
         builder.HasIndex(x => new { x.ClinicId, x.Role });
+        builder.HasIndex(x => x.InviteTokenHash).IsUnique().HasFilter("[InviteTokenHash] IS NOT NULL");
 
         builder.HasOne(x => x.Clinic)
             .WithMany(x => x.Users)

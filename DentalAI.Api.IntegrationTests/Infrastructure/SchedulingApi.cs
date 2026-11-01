@@ -56,7 +56,7 @@ public sealed class SchedulingApi
             firstName = "Test",
             lastName = $"Doctor {Guid.NewGuid():N}"[..20],
             specialty = "General",
-            phone = "+1 555 010 0100",
+            phone = "+1 212 555 0100",
             email = $"doctor.{Guid.NewGuid():N}@test.local"
         }, Json));
 
@@ -84,7 +84,7 @@ public sealed class SchedulingApi
             clinicId = ClinicId,
             firstName = "Test",
             lastName = "Patient",
-            phone = "+1 555 010 0199"
+            phone = "+1 212 555 0199"
         }, Json))).Id;
 
     /// <summary>A clinic-local date far enough ahead that every slot is in the future.</summary>

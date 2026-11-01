@@ -10,9 +10,8 @@ export interface Doctor {
   clinicTimeZone?: string | null;
 }
 
-/** Body for POST /doctors and PUT /doctors/{id}. Clinic users' clinicId is ignored by the API. */
+/** Body for POST /doctors and PUT /doctors/{id}. Always for the signed-in user's clinic. */
 export interface DoctorRequest {
-  clinicId: string | null;
   firstName: string;
   lastName: string;
   specialty: string;

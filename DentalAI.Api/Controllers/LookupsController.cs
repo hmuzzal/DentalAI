@@ -1,5 +1,6 @@
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Models;
+using DentalAI.Application.Common.Phone;
 using DentalAI.Application.DTOs.Lookups;
 using DentalAI.Application.Services;
 using DentalAI.Application.Validators;
@@ -20,4 +21,10 @@ public sealed class LookupsController(IDateTimeProvider dateTimeProvider) : ApiC
     [HttpGet("slot-intervals")]
     public IActionResult GetSlotIntervals() =>
         HandleResult(Result<IReadOnlyList<int>>.Ok(ClinicRules.AllowedSlotIntervals));
+
+    /// <summary>Countries for the clinic form (United States first). The code sets the default phone region.</summary>
+    [HttpGet("countries")]
+    public IActionResult GetCountries() =>
+        HandleResult(Result<IReadOnlyList<CountryOptionDto>>.Ok(
+            PhoneNumberRules.Countries().Select(c => new CountryOptionDto(c.Code, c.Name)).ToList()));
 }

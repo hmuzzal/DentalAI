@@ -19,6 +19,7 @@ public sealed class ApplicationDbContext(
     public DbSet<Doctor> Doctors => Set<Doctor>();
     public DbSet<DentalAI.Domain.Entities.Service> Services => Set<DentalAI.Domain.Entities.Service>();
     public DbSet<Patient> Patients => Set<Patient>();
+    public DbSet<PatientInsurance> PatientInsurances => Set<PatientInsurance>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<DoctorSchedule> DoctorSchedules => Set<DoctorSchedule>();
     public DbSet<DoctorBreak> DoctorBreaks => Set<DoctorBreak>();
@@ -26,7 +27,6 @@ public sealed class ApplicationDbContext(
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     private Guid? CurrentClinicId => currentUserService.ClinicId;
-    private bool BypassTenantFilter => currentUserService.IsSuperAdmin;
 
     /// <summary>
     /// Every DateTime column stores UTC. SQL Server's datetime2 has no kind, so mark values read back as UTC;
@@ -162,11 +162,11 @@ public sealed class ApplicationDbContext(
     {
         // Compare with the nullable CurrentClinicId, not CurrentClinicId.Value: EF evaluates every parameter
         // up front, so .Value threw "Nullable object must have a value" for users without a clinic (super admins).
+        // No bypass: platform admins have no clinic, so they see no clinic rows at all. Platform-wide counts use
+        // IgnoreQueryFilters() explicitly (PlatformRepository), and return aggregates only.
         return entity => !entity.IsDeleted
-            && (BypassTenantFilter
-                || (CurrentClinicId.HasValue
-                    && EF.Property<Guid?>(entity, nameof(ITenantEntity.ClinicId)).HasValue
-                    && EF.Property<Guid?>(entity, nameof(ITenantEntity.ClinicId)) == CurrentClinicId));
+            && CurrentClinicId.HasValue
+            && EF.Property<Guid?>(entity, nameof(ITenantEntity.ClinicId)) == CurrentClinicId;
     }
 
     private static string BuildConcurrencyEntryDiagnostics(EntityEntry entry)

@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { catchError, map, Observable, of, tap } from 'rxjs';
 import { API_BASE_URL } from '../tokens/api-base-url.token';
 import { ApiResponse } from '../models/api-response.model';
-import { AuthResponse, LoginRequest, UserProfile, UserRole } from '../models/auth.models';
+import { AuthResponse, InviteDetails, LoginRequest, UserProfile, UserRole } from '../models/auth.models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthStateService {
@@ -34,6 +34,25 @@ export class AuthStateService {
         tap((response) => this.persistSession(response)),
         tap(() => this.loading.set(false))
       );
+  }
+
+  /** Who an invite link is for. 404 when the link is unknown, used or expired (the page shows its own message). */
+  getInvite(token: string): Observable<InviteDetails> {
+    return this.http
+      .get<ApiResponse<InviteDetails>>(`${this.apiBaseUrl}/auth/invite`, {
+        params: { token },
+        context: new HttpContext().set(SILENT_ERRORS, true)
+      })
+      .pipe(map((response) => response.data));
+  }
+
+  /** Sets the invited user's password and signs them in. */
+  acceptInvite(token: string, password: string): Observable<AuthResponse> {
+    return this.http
+      .post<ApiResponse<AuthResponse>>(`${this.apiBaseUrl}/auth/accept-invite`, { token, password }, {
+        context: new HttpContext().set(SILENT_ERRORS, true)
+      })
+      .pipe(map((response) => response.data), tap((response) => this.persistSession(response)));
   }
 
   loadCurrentUser(): Observable<UserProfile | null> {

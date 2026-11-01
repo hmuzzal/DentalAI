@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable, shareReplay, tap } from 'rxjs';
 import { ApiResponse } from '../models/api-response.model';
-import { TimeZoneOption } from '../models/clinic.models';
+import { CountryOption, TimeZoneOption } from '../models/clinic.models';
 import { API_BASE_URL } from '../tokens/api-base-url.token';
 
 /** Reference lists from /lookups. Each list is fetched once per session (a failed fetch is retried next time). */
@@ -13,6 +13,7 @@ export class LookupsService {
 
   private timeZones$?: Observable<TimeZoneOption[]>;
   private slotIntervals$?: Observable<number[]>;
+  private countries$?: Observable<CountryOption[]>;
 
   /** Main US zones first, then every other zone by current UTC offset. */
   timeZones(): Observable<TimeZoneOption[]> {
@@ -22,6 +23,11 @@ export class LookupsService {
   /** Allowed clinic slot intervals, in minutes. */
   slotIntervals(): Observable<number[]> {
     return (this.slotIntervals$ ??= this.cached<number[]>('slot-intervals', () => (this.slotIntervals$ = undefined)));
+  }
+
+  /** Countries for the clinic form, United States first. */
+  countries(): Observable<CountryOption[]> {
+    return (this.countries$ ??= this.cached<CountryOption[]>('countries', () => (this.countries$ = undefined)));
   }
 
   private cached<T>(path: string, forget: () => void): Observable<T> {

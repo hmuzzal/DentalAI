@@ -28,7 +28,8 @@ public sealed class ApplicationDbContextSeeder(
             Id = clinicId,
             Name = "Demo Dental Clinic",
             Email = "clinic@dentalai.local",
-            Phone = "+1-555-0101",
+            Phone = "+8801711000101",
+            Country = "BD",
             Address = "123 Demo Street",
             TimeZone = "Asia/Dhaka",
             CreatedBy = "seed",
@@ -85,7 +86,7 @@ public sealed class ApplicationDbContextSeeder(
             FirstName = "Sarah",
             LastName = "Ahmed",
             Specialty = "General Dentistry",
-            Phone = "+1-555-0111",
+            Phone = "+8801711000111",
             Email = "sarah.ahmed@dentalai.local",
             CreatedBy = "seed",
             CreatedDate = dateTimeProvider.UtcNow

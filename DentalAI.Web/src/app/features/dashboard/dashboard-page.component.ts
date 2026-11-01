@@ -101,7 +101,7 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
             <ng-template #todayTitle>
               <div class="card-title"><span>Today's appointments</span></div>
             </ng-template>
-            <ng-template #calendarLink><a routerLink="/calendar">Open calendar</a></ng-template>
+            <ng-template #calendarLink><a routerLink="/appointments">Open calendar</a></ng-template>
 
             <app-page-state [status]="today.status()" [empty]="!today.value().length" (retry)="today.reload()"
                             emptyText="No appointments today" [rows]="3"

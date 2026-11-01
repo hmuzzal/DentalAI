@@ -9,15 +9,24 @@ public sealed class AuthController(
     IAuthService authService,
     ILogger<AuthController> logger) : ApiControllerBase
 {
+    // There is no self sign-up: platform admins create clinics and invite each clinic's first admin, and clinic
+    // admins invite their own staff. People join only through a single-use invite link.
+
+    /// <summary>Who an invite link is for (for the "Set your password" page).</summary>
     [AllowAnonymous]
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
+    [HttpGet("invite")]
+    public async Task<IActionResult> GetInvite([FromQuery] string token, CancellationToken cancellationToken) =>
+        HandleResult(await authService.GetInviteAsync(token, cancellationToken));
+
+    /// <summary>Sets the password for an invited user and signs them in. The link can't be used again.</summary>
+    [AllowAnonymous]
+    [HttpPost("accept-invite")]
+    public async Task<IActionResult> AcceptInvite([FromBody] AcceptInviteRequest request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Registration attempt for clinic {ClinicName} with admin {Email}", request.ClinicName, request.AdminEmail);
-        var result = await authService.RegisterAsync(request, cancellationToken);
-        if (!result.Success)
+        var result = await authService.AcceptInviteAsync(request, cancellationToken);
+        if (result.Success)
         {
-            logger.LogWarning("Registration failed for {Email}: {Message}", request.AdminEmail, result.Message);
+            logger.LogInformation("Invite accepted by {Email}", result.Data?.User.Email);
         }
 
         return HandleResult(result);

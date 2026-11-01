@@ -9,7 +9,7 @@ public sealed class PatientRepository(ApplicationDbContext dbContext) : IPatient
     public Task AddAsync(Patient patient, CancellationToken cancellationToken) => dbContext.Patients.AddAsync(patient, cancellationToken).AsTask();
 
     public Task<Patient?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Patients.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        dbContext.Patients.Include(x => x.Insurances).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<Patient>> ListAsync(Guid? clinicId, CancellationToken cancellationToken)
     {
@@ -45,9 +45,13 @@ public sealed class PatientRepository(ApplicationDbContext dbContext) : IPatient
             // parameterised LIKE; the column collation decides case sensitivity (insensitive by default).
             foreach (var word in term.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(5))
             {
+                // Phones are stored as E.164 (+12125550142), so "(212)" or "555-0142" match on their digits.
+                var digits = new string(word.Where(char.IsDigit).ToArray());
+                var matchDigits = digits.Length >= 3;
                 query = query.Where(x => x.FirstName.Contains(word)
                     || x.LastName.Contains(word)
                     || x.Phone.Contains(word)
+                    || (matchDigits && x.Phone.Contains(digits))
                     || (x.Email != null && x.Email.Contains(word)));
             }
         }
@@ -66,4 +70,6 @@ public sealed class PatientRepository(ApplicationDbContext dbContext) : IPatient
 
     public void Update(Patient patient) => dbContext.Patients.Update(patient);
     public void Remove(Patient patient) => dbContext.Patients.Remove(patient);
+    public void AddInsurance(PatientInsurance insurance) => dbContext.PatientInsurances.Add(insurance);
+    public void RemoveInsurance(PatientInsurance insurance) => dbContext.PatientInsurances.Remove(insurance);
 }
