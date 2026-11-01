@@ -8,6 +8,7 @@ public sealed class Appointment : BaseEntity, ITenantEntity
     public Guid? ClinicId { get; set; }
     public Guid DoctorId { get; set; }
     public Guid PatientId { get; set; }
+    public Guid ServiceId { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public string? Notes { get; set; }
@@ -16,4 +17,5 @@ public sealed class Appointment : BaseEntity, ITenantEntity
     public Clinic? Clinic { get; set; }
     public Doctor? Doctor { get; set; }
     public Patient? Patient { get; set; }
+    public Service? Service { get; set; }
 }

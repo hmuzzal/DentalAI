@@ -11,6 +11,7 @@ public sealed class DashboardService(
     IDoctorRepository doctorRepository,
     IPatientRepository patientRepository,
     IServiceRepository serviceRepository,
+    ISchedulingRepository schedulingRepository,
     IDateTimeProvider dateTimeProvider) : IDashboardService
 {
     public async Task<Result<DashboardStatsDto>> GetStatsAsync(CancellationToken cancellationToken)
@@ -33,5 +34,12 @@ public sealed class DashboardService(
             TotalPatients = totalPatients,
             TotalServices = services.Count
         });
+    }
+
+    public async Task<Result<SchedulingDashboardDto>> GetSchedulingStatsAsync(CancellationToken cancellationToken)
+    {
+        var utcNow = dateTimeProvider.UtcNow;
+        var data = await schedulingRepository.GetDashboardAsync(utcNow.Date, utcNow.Date.AddDays(1), utcNow, cancellationToken);
+        return Result<SchedulingDashboardDto>.Ok(data);
     }
 }

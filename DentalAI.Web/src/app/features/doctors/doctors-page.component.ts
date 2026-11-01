@@ -1,51 +1,50 @@
-import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzTableModule } from 'ng-zorro-antd/table';
-import { NzTagModule } from 'ng-zorro-antd/tag';
 import { Doctor } from '../../core/models/doctor.models';
 import { DoctorsService } from '../../core/services/doctors.service';
+import { PageHeaderComponent } from '../../shared/page-header.component';
+import { PageStateComponent } from '../../shared/page-state.component';
+import { remoteData } from '../../shared/remote-data';
 
 @Component({
   selector: 'app-doctors-page',
   standalone: true,
-  imports: [CommonModule, NzCardModule, NzTableModule, NzTagModule],
+  imports: [NzCardModule, NzTableModule, PageHeaderComponent, PageStateComponent],
   template: `
-    <nz-card nzTitle="Doctors" class="table-card">
-      <nz-table [nzData]="doctors()" [nzFrontPagination]="false">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Specialization</th>
-            <th>Hours</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (doctor of doctors(); track doctor.id) {
-            <tr>
-              <td>{{ doctor.fullName }}</td>
-              <td>{{ doctor.specialization }}</td>
-              <td>{{ doctor.workDayStart }} - {{ doctor.workDayEnd }}</td>
-              <td>
-                <nz-tag [nzColor]="doctor.isActive ? 'green' : 'default'">
-                  {{ doctor.isActive ? 'Active' : 'Inactive' }}
-                </nz-tag>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </nz-table>
-    </nz-card>
+    <section class="da-page">
+      <app-page-header title="Doctors" subtitle="Dentists and hygienists who see patients at this clinic." />
+
+      <nz-card>
+        <app-page-state [status]="doctors.status()" [empty]="!doctors.value().length" (retry)="doctors.reload()"
+                        emptyText="No doctors yet" errorText="We could not load doctors.">
+          <nz-table [nzData]="doctors.value()" [nzFrontPagination]="false" nzSize="middle">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Specialty</th>
+                <th>Phone</th>
+                <th>Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (doctor of doctors.value(); track doctor.id) {
+                <tr>
+                  <td><strong>{{ doctor.firstName }} {{ doctor.lastName }}</strong></td>
+                  <td>{{ doctor.specialty || '—' }}</td>
+                  <td>{{ doctor.phone || '—' }}</td>
+                  <td>{{ doctor.email || '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </nz-table>
+        </app-page-state>
+      </nz-card>
+    </section>
   `,
-  styles: [`.table-card { border-radius: 1.25rem; }`],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DoctorsPageComponent {
   private readonly doctorsService = inject(DoctorsService);
-  readonly doctors = signal<Doctor[]>([]);
-
-  constructor() {
-    this.doctorsService.getAll().subscribe((data) => this.doctors.set(data));
-  }
+  readonly doctors = remoteData<Doctor[]>(() => this.doctorsService.getAll(), []);
 }

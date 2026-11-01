@@ -6,4 +6,5 @@ namespace DentalAI.Application.Interfaces;
 public interface IDashboardService
 {
     Task<Result<DashboardStatsDto>> GetStatsAsync(CancellationToken cancellationToken);
+    Task<Result<SchedulingDashboardDto>> GetSchedulingStatsAsync(CancellationToken cancellationToken);
 }

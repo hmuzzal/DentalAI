@@ -1,17 +1,117 @@
-@import 'ng-zorro-antd/ng-zorro-antd.min.css';
+// ng-zorro's CSS-variable build, themed below via --ant-* variables.
+@import 'ng-zorro-antd/ng-zorro-antd.variable.min.css';
 
+// ---------------------------------------------------------------------------
+// Design tokens. Use these instead of hard-coded colours in components.
+// ---------------------------------------------------------------------------
 :root {
   color-scheme: light;
-  font-family: 'Segoe UI', 'Aptos', sans-serif;
-  background: #f4f4ef;
-}
 
-body {
-  margin: 0;
-  background: linear-gradient(180deg, #f7f6f2 0%, #edf2f3 100%);
-  color: #17343a;
+  // Brand
+  --da-brand: #1f6f75;          // primary actions, active nav (white text passes AA)
+  --da-brand-hover: #2b8a8f;
+  --da-brand-active: #165257;
+  --da-brand-deep: #12343b;     // brand mark, headings accent
+  --da-brand-soft: #e8f3f3;     // selected backgrounds
+
+  // Data (validated with the dataviz palette checker against the card surface)
+  --da-data-1: #13979c;
+
+  // Ink
+  --da-ink: #12343b;            // primary text
+  --da-ink-2: #4f686d;          // secondary text
+  --da-ink-3: #7a9195;          // muted text, captions
+
+  // Surfaces
+  --da-bg: #f4f6f5;             // app background
+  --da-surface: #ffffff;        // cards, header, sider
+  --da-surface-2: #f7f8f7;      // inset areas (calendar days, wells)
+  --da-border: #e3e9ea;         // hairlines
+  --da-grid: #eef2f2;           // chart gridlines
+
+  // Status (reserved; always pair with a label)
+  --da-success: #389e0d;
+  --da-warning: #d48806;
+  --da-danger: #cf1322;
+  --da-info: #1677ff;
+
+  // Shape & spacing
+  --da-radius-sm: 6px;
+  --da-radius: 10px;
+  --da-radius-lg: 14px;
+  --da-shadow: 0 1px 2px rgba(18, 52, 59, 0.06), 0 1px 3px rgba(18, 52, 59, 0.04);
+  --da-space-1: 4px;
+  --da-space-2: 8px;
+  --da-space-3: 12px;
+  --da-space-4: 16px;
+  --da-space-5: 24px;
+  --da-space-6: 32px;
+
+  --da-font: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+
+  // ng-zorro theme (CSS-variable build)
+  --ant-primary-color: var(--da-brand);
+  --ant-primary-color-hover: var(--da-brand-hover);
+  --ant-primary-color-active: var(--da-brand-active);
+  --ant-primary-color-outline: rgba(31, 111, 117, 0.2);
+  --ant-primary-1: #e8f3f3;
+  --ant-primary-2: #cfe6e6;
+  --ant-primary-3: #a6d0d1;
+  --ant-primary-4: #7bb8ba;
+  --ant-primary-5: #2b8a8f;
+  --ant-primary-6: #1f6f75;
+  --ant-primary-7: #165257;
+  --ant-primary-color-deprecated-pure: #1f6f75;
+  --ant-primary-color-deprecated-l-35: #a9dadd;
+  --ant-primary-color-deprecated-l-20: #5fb9be;
+  --ant-primary-color-deprecated-t-20: #4c8c91;
+  --ant-primary-color-deprecated-t-50: #8fb7ba;
+  --ant-primary-color-deprecated-f-12: rgba(31, 111, 117, 0.12);
+  --ant-primary-color-active-deprecated-f-30: rgba(22, 82, 87, 0.3);
+  --ant-primary-color-active-deprecated-d-02: #144c51;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  font-family: var(--da-font);
+  background: var(--da-bg);
+  color: var(--da-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  color: var(--da-ink);
+}
+
+// ---------------------------------------------------------------------------
+// Shared page primitives
+// ---------------------------------------------------------------------------
+.da-page {
+  display: grid;
+  gap: var(--da-space-4);
+  min-width: 0;
+}
+
+// Cards across the app share one shape.
+.ant-card {
+  border-radius: var(--da-radius-lg);
+  border-color: var(--da-border);
+  box-shadow: var(--da-shadow);
+}
+
+.ant-card-head {
+  border-bottom-color: var(--da-border);
+}
+
+.ant-table-wrapper .ant-table {
+  border-radius: var(--da-radius);
+}
+
+.da-muted {
+  color: var(--da-ink-3);
 }

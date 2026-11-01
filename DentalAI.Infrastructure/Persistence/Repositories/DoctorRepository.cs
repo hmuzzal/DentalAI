@@ -9,7 +9,7 @@ public sealed class DoctorRepository(ApplicationDbContext dbContext) : IDoctorRe
     public Task AddAsync(Doctor doctor, CancellationToken cancellationToken) => dbContext.Doctors.AddAsync(doctor, cancellationToken).AsTask();
 
     public Task<Doctor?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Doctors.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        dbContext.Doctors.Include(x => x.Clinic).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<Doctor>> ListAsync(Guid? clinicId, CancellationToken cancellationToken)
     {

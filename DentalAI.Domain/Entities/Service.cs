@@ -12,4 +12,5 @@ public sealed class Service : BaseEntity, ITenantEntity
     public bool IsActive { get; set; } = true;
 
     public Clinic? Clinic { get; set; }
+    public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 }

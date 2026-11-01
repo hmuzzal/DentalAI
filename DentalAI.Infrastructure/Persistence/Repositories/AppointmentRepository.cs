@@ -13,6 +13,7 @@ public sealed class AppointmentRepository(ApplicationDbContext dbContext) : IApp
         dbContext.Appointments
             .Include(x => x.Doctor)
             .Include(x => x.Patient)
+            .Include(x => x.Service)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<Appointment>> ListAsync(Guid? clinicId, CancellationToken cancellationToken)
@@ -21,6 +22,7 @@ public sealed class AppointmentRepository(ApplicationDbContext dbContext) : IApp
             .AsNoTracking()
             .Include(x => x.Doctor)
             .Include(x => x.Patient)
+            .Include(x => x.Service)
             .AsQueryable();
 
         if (clinicId.HasValue)

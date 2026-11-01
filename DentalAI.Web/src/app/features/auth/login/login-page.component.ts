@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, isDevMode, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
@@ -18,9 +18,11 @@ import { AuthStateService } from '../../../core/services/auth-state.service';
   template: `
     <div class="login">
       <section class="login__hero">
-        <p>DentalAI SaaS</p>
-        <h1>Run each clinic from one calm, structured command center.</h1>
-        <span>Seed credentials: superadmin@dentalai.local / SuperAdmin123!</span>
+        <p>DentalAI</p>
+        <h1>Scheduling, patients and reminders for your dental clinic.</h1>
+        @if (devMode) {
+          <span>Development seed login: superadmin&#64;dentalai.local / SuperAdmin123!</span>
+        }
       </section>
 
       <nz-card class="login__card" [nzBordered]="false">
@@ -55,7 +57,7 @@ import { AuthStateService } from '../../../core/services/auth-state.service';
       linear-gradient(135deg, #12343b, #1e5660 52%, #f2ede5 52%, #f7f6f2 100%); }
     .login__hero { padding: 4rem; color: #fff; display: flex; flex-direction: column; justify-content: center; }
     .login__hero p { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; opacity: 0.75; }
-    .login__hero h1 { font-size: clamp(2.6rem, 4vw, 4.25rem); line-height: 1; margin: 0.75rem 0 1rem; max-width: 10ch; }
+    .login__hero h1 { font-size: clamp(2.6rem, 4vw, 4.25rem); line-height: 1.05; margin: 0.75rem 0 1rem; max-width: 16ch; color: #fff; }
     .login__hero span { color: rgba(255,255,255,0.8); max-width: 24rem; }
     .login__card { align-self: center; justify-self: center; width: min(420px, calc(100% - 2rem)); border-radius: 1.5rem; box-shadow: 0 24px 80px rgba(18, 52, 59, 0.18); }
     form { display: grid; gap: 1rem; }
@@ -74,10 +76,12 @@ export class LoginPageComponent {
   private readonly router = inject(Router);
   readonly authState = inject(AuthStateService);
   readonly error = signal<string | null>(null);
+  readonly devMode = isDevMode();
 
+  // Pre-fill the seed login in development builds only.
   readonly form = this.fb.nonNullable.group({
-    email: ['superadmin@dentalai.local', [Validators.required, Validators.email]],
-    password: ['SuperAdmin123!', Validators.required]
+    email: [this.devMode ? 'superadmin@dentalai.local' : '', [Validators.required, Validators.email]],
+    password: [this.devMode ? 'SuperAdmin123!' : '', Validators.required]
   });
 
   submit(): void {

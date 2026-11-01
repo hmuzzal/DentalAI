@@ -1,4 +1,5 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
+import { SILENT_ERRORS } from '../http/http-context';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, map, Observable, of, tap } from 'rxjs';
@@ -24,7 +25,10 @@ export class AuthStateService {
   login(payload: LoginRequest): Observable<AuthResponse> {
     this.loading.set(true);
     return this.http
-      .post<ApiResponse<AuthResponse>>(`${this.apiBaseUrl}/auth/login`, payload)
+      // The login form shows its own error, so skip the global error toast.
+      .post<ApiResponse<AuthResponse>>(`${this.apiBaseUrl}/auth/login`, payload, {
+        context: new HttpContext().set(SILENT_ERRORS, true)
+      })
       .pipe(
         map((response) => response.data),
         tap((response) => this.persistSession(response)),

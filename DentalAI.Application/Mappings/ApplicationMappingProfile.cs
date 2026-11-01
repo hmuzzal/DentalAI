@@ -17,7 +17,9 @@ public sealed class ApplicationMappingProfile : Profile
 
         CreateMap<User, UserProfileDto>()
             .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => $"{src.FirstName} {src.LastName}".Trim()))
-            .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role.ToString()));
+            .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role.ToString()))
+            .ForMember(dest => dest.ClinicName, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.Name : null))
+            .ForMember(dest => dest.ClinicTimeZone, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.TimeZone : null));
 
         CreateMap<Doctor, DoctorDto>();
 
@@ -30,6 +32,8 @@ public sealed class ApplicationMappingProfile : Profile
             .ForMember(dest => dest.PatientName, opt => opt.MapFrom(src =>
                 src.Patient != null ? $"{src.Patient.FirstName} {src.Patient.LastName}".Trim() : string.Empty))
             .ForMember(dest => dest.DoctorName, opt => opt.MapFrom(src =>
-                src.Doctor != null ? $"{src.Doctor.FirstName} {src.Doctor.LastName}".Trim() : string.Empty));
+                src.Doctor != null ? $"{src.Doctor.FirstName} {src.Doctor.LastName}".Trim() : string.Empty))
+            .ForMember(dest => dest.ServiceName, opt => opt.MapFrom(src =>
+                src.Service != null ? src.Service.Name : string.Empty));
     }
 }

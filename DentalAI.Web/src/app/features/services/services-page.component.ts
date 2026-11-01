@@ -1,51 +1,58 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { CurrencyPipe } from '@angular/common';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { DentalService } from '../../core/models/service.models';
 import { ServicesCatalogService } from '../../core/services/services-catalog.service';
+import { PageHeaderComponent } from '../../shared/page-header.component';
+import { PageStateComponent } from '../../shared/page-state.component';
+import { remoteData } from '../../shared/remote-data';
 
 @Component({
   selector: 'app-services-page',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, NzCardModule, NzTableModule, NzTagModule],
+  imports: [CurrencyPipe, NzCardModule, NzTableModule, NzTagModule, PageHeaderComponent, PageStateComponent],
   template: `
-    <nz-card nzTitle="Services" class="table-card">
-      <nz-table [nzData]="services()" [nzFrontPagination]="false">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Duration</th>
-            <th>Price</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (service of services(); track service.id) {
-            <tr>
-              <td>{{ service.name }}</td>
-              <td>{{ service.durationMinutes }} min</td>
-              <td>{{ service.price | currency }}</td>
-              <td>
-                <nz-tag [nzColor]="service.isActive ? 'green' : 'default'">
-                  {{ service.isActive ? 'Active' : 'Inactive' }}
-                </nz-tag>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </nz-table>
-    </nz-card>
+    <section class="da-page">
+      <app-page-header title="Services"
+                       subtitle="Treatments patients can book. Duration sets the length of each appointment." />
+
+      <nz-card>
+        <app-page-state [status]="services.status()" [empty]="!services.value().length" (retry)="services.reload()"
+                        emptyText="No services yet" errorText="We could not load services.">
+          <nz-table [nzData]="services.value()" [nzFrontPagination]="false" nzSize="middle">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th nzAlign="right">Duration</th>
+                <th nzAlign="right">Price</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (service of services.value(); track service.id) {
+                <tr>
+                  <td><strong>{{ service.name }}</strong></td>
+                  <td nzAlign="right" class="num">{{ service.durationMinutes }} min</td>
+                  <td nzAlign="right" class="num">{{ service.price | currency: 'USD' }}</td>
+                  <td>
+                    <nz-tag [nzColor]="service.isActive ? 'green' : 'default'">
+                      {{ service.isActive ? 'Active' : 'Inactive' }}
+                    </nz-tag>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </nz-table>
+        </app-page-state>
+      </nz-card>
+    </section>
   `,
-  styles: [`.table-card { border-radius: 1.25rem; }`],
+  styles: [`.num { font-variant-numeric: tabular-nums; }`],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ServicesPageComponent {
   private readonly servicesCatalogService = inject(ServicesCatalogService);
-  readonly services = signal<DentalService[]>([]);
-
-  constructor() {
-    this.servicesCatalogService.getAll().subscribe((data) => this.services.set(data));
-  }
+  readonly services = remoteData<DentalService[]>(() => this.servicesCatalogService.getAll(), []);
 }

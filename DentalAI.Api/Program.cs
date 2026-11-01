@@ -514,8 +514,8 @@ static async Task AlignLegacyAppointmentSchemaAsync(
             return;
         }
 
+        // ServiceId is a live column (AddSchedulingEngine migration); it must not be treated as legacy.
         var requiresAlignment = appointmentColumns.Contains("PatientName")
-            || appointmentColumns.Contains("ServiceId")
             || appointmentColumns.Contains("StartAt")
             || appointmentColumns.Contains("EndAt")
             || appointmentColumns.Contains("ScheduledStartUtc")
@@ -713,28 +713,6 @@ static async Task AlignLegacyAppointmentSchemaAsync(
                     EXEC(N''ALTER TABLE [dbo].[Appointments] DROP CONSTRAINT ['' + @constraintName + N'']'');
 
                 ALTER TABLE [dbo].[Appointments] DROP COLUMN [ScheduledEndUtc];');
-
-            IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Appointments_Services_ServiceId')
-                ALTER TABLE [dbo].[Appointments] DROP CONSTRAINT [FK_Appointments_Services_ServiceId];
-
-            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Appointments_ServiceId' AND object_id = OBJECT_ID(N'dbo.Appointments'))
-                DROP INDEX [IX_Appointments_ServiceId] ON [dbo].[Appointments];
-
-            IF COL_LENGTH('dbo.Appointments', 'ServiceId') IS NOT NULL
-                EXEC(N'
-                DECLARE @constraintName sysname;
-                SELECT @constraintName = dc.name
-                FROM sys.default_constraints AS dc
-                INNER JOIN sys.columns AS c
-                    ON c.object_id = dc.parent_object_id
-                   AND c.column_id = dc.parent_column_id
-                WHERE dc.parent_object_id = OBJECT_ID(N''dbo.Appointments'')
-                  AND c.name = N''ServiceId'';
-
-                IF @constraintName IS NOT NULL
-                    EXEC(N''ALTER TABLE [dbo].[Appointments] DROP CONSTRAINT ['' + @constraintName + N'']'');
-
-                ALTER TABLE [dbo].[Appointments] DROP COLUMN [ServiceId];');
             """,
             cancellationToken);
 

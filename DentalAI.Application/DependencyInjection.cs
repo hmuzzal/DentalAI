@@ -20,6 +20,9 @@ public static class DependencyInjection
         services.AddScoped<IPatientService, PatientService>();
         services.AddScoped<IAppointmentService, AppointmentService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<ISchedulingService, SchedulingService>();
+        services.AddScoped<ICalendarService, CalendarService>();
+        services.AddSingleton<SchedulingEngine>();
 
         return services;
     }

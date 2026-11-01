@@ -9,8 +9,8 @@ export interface Appointment {
   patientName: string;
   serviceId: string;
   serviceName: string;
-  scheduledStartUtc: string;
-  scheduledEndUtc: string;
+  startTime: string;
+  endTime: string;
   status: AppointmentStatus;
   notes?: string | null;
 }

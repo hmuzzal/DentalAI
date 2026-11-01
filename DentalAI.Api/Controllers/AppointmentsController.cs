@@ -8,8 +8,17 @@ namespace DentalAI.Api.Controllers;
 [Authorize(Policy = Infrastructure.AuthorizationPolicies.ReceptionistAccess)]
 public sealed class AppointmentsController(
     IAppointmentService appointmentService,
+    ISchedulingService schedulingService,
     ILogger<AppointmentsController> logger) : ApiControllerBase
 {
+    [HttpGet("available-slots")]
+    public async Task<IActionResult> GetAvailableSlots(
+        [FromQuery] Guid doctorId,
+        [FromQuery] DateOnly date,
+        [FromQuery] Guid serviceId,
+        CancellationToken cancellationToken) =>
+        HandleResult(await schedulingService.GetAvailableSlotsAsync(doctorId, date, serviceId, cancellationToken));
+
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken) =>
         HandleResult(await appointmentService.ListAsync(cancellationToken));

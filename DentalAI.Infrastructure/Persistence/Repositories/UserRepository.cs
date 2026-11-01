@@ -11,15 +11,21 @@ public sealed class UserRepository(ApplicationDbContext dbContext) : IUserReposi
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken) =>
         dbContext.Users
             .IgnoreQueryFilters()
+            .Include(x => x.Clinic)
             .FirstOrDefaultAsync(x => x.Email == email && !x.IsDeleted, cancellationToken);
 
     public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Users.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        dbContext.Users
+            .Include(x => x.Clinic)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public Task<User?> GetByRefreshTokenAsync(string refreshToken, CancellationToken cancellationToken) =>
         dbContext.Users
             .IgnoreQueryFilters()
+            .Include(x => x.Clinic)
             .FirstOrDefaultAsync(x => x.RefreshToken == refreshToken && !x.IsDeleted, cancellationToken);
 
-    public void Update(User user) => dbContext.Users.Update(user);
+    // Mark only the user as modified. Users.Update() walks the graph and would also
+    // mark the included Clinic as modified (and bump its audit fields).
+    public void Update(User user) => dbContext.Entry(user).State = EntityState.Modified;
 }

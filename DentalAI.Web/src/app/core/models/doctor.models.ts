@@ -1,9 +1,9 @@
 export interface Doctor {
   id: string;
   clinicId: string;
-  fullName: string;
-  specialization: string;
-  workDayStart: string;
-  workDayEnd: string;
-  isActive: boolean;
+  firstName: string;
+  lastName: string;
+  specialty: string;
+  phone: string;
+  email: string;
 }

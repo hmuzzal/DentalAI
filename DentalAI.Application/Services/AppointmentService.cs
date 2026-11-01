@@ -13,6 +13,8 @@ public sealed class AppointmentService(
     IAppointmentRepository appointmentRepository,
     IDoctorRepository doctorRepository,
     IPatientRepository patientRepository,
+    IServiceRepository serviceRepository,
+    ISchedulingService schedulingService,
     ICurrentUserService currentUserService,
     IUnitOfWork unitOfWork,
     IDateTimeProvider dateTimeProvider,
@@ -40,11 +42,6 @@ public sealed class AppointmentService(
             return Result<AppointmentDto>.Fail(ResultStatus.ValidationError, "Appointments cannot be booked in the past.");
         }
 
-        if (request.EndTime <= request.StartTime)
-        {
-            return Result<AppointmentDto>.Fail(ResultStatus.ValidationError, "End time must be later than start time.");
-        }
-
         var doctor = await doctorRepository.GetByIdAsync(request.DoctorId, cancellationToken);
         if (doctor is null || !currentUserService.CanAccessClinic(doctor.ClinicId))
         {
@@ -57,22 +54,29 @@ public sealed class AppointmentService(
             return Result<AppointmentDto>.Fail(ResultStatus.NotFound, "Patient was not found for the selected clinic.");
         }
 
-        var hasOverlap = await appointmentRepository.HasOverlapAsync(doctor.Id, request.StartTime, request.EndTime, null, cancellationToken);
-        if (hasOverlap)
+        var service = await serviceRepository.GetByIdAsync(request.ServiceId, cancellationToken);
+        if (service is null || service.ClinicId != doctor.ClinicId || !service.IsActive)
         {
-            return Result<AppointmentDto>.Fail(ResultStatus.Conflict, "The selected doctor already has an overlapping appointment for that time range.");
+            return Result<AppointmentDto>.Fail(ResultStatus.NotFound, "Service was not found or is inactive for the selected clinic.");
         }
+
+        var endTime = request.StartTime.AddMinutes(service.DurationMinutes);
+        var schedulingValidation = await schedulingService.ValidateAppointmentAsync(doctor.Id, request.StartTime, endTime, cancellationToken);
+        if (!schedulingValidation.Success)
+            return Result<AppointmentDto>.Fail(schedulingValidation.Status, schedulingValidation.Message, schedulingValidation.Errors);
 
         var appointment = new Appointment
         {
             ClinicId = doctor.ClinicId,
             DoctorId = doctor.Id,
             PatientId = patient.Id,
+            ServiceId = service.Id,
             StartTime = request.StartTime,
-            EndTime = request.EndTime,
+            EndTime = endTime,
             Notes = request.Notes?.Trim(),
             Doctor = doctor,
             Patient = patient
+            ,Service = service
         };
 
         await appointmentRepository.AddAsync(appointment, cancellationToken);

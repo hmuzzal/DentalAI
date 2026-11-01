@@ -20,6 +20,9 @@ public sealed class ApplicationDbContext(
     public DbSet<DentalAI.Domain.Entities.Service> Services => Set<DentalAI.Domain.Entities.Service>();
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<DoctorSchedule> DoctorSchedules => Set<DoctorSchedule>();
+    public DbSet<DoctorBreak> DoctorBreaks => Set<DoctorBreak>();
+    public DbSet<DoctorLeave> DoctorLeaves => Set<DoctorLeave>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     private Guid? CurrentClinicId => currentUserService.ClinicId;

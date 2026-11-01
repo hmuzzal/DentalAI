@@ -13,4 +13,7 @@ public sealed class Doctor : BaseEntity, ITenantEntity
 
     public Clinic? Clinic { get; set; }
     public ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public ICollection<DoctorSchedule> Schedules { get; set; } = new List<DoctorSchedule>();
+    public ICollection<DoctorBreak> Breaks { get; set; } = new List<DoctorBreak>();
+    public ICollection<DoctorLeave> Leaves { get; set; } = new List<DoctorLeave>();
 }

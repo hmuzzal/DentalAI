@@ -10,4 +10,8 @@ public sealed class DashboardController(IDashboardService dashboardService) : Ap
     [HttpGet("stats")]
     public async Task<IActionResult> GetStats(CancellationToken cancellationToken) =>
         HandleResult(await dashboardService.GetStatsAsync(cancellationToken));
+
+    [HttpGet("scheduling")]
+    public async Task<IActionResult> GetSchedulingStats(CancellationToken cancellationToken) =>
+        HandleResult(await dashboardService.GetSchedulingStatsAsync(cancellationToken));
 }
