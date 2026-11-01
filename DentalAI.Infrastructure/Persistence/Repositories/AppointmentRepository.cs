@@ -51,5 +51,11 @@ public sealed class AppointmentRepository(ApplicationDbContext dbContext) : IApp
             x.StartTime > utcNow
             && (x.Status == AppointmentStatus.Pending || x.Status == AppointmentStatus.Confirmed), cancellationToken);
 
+    public Task<int> CountUpcomingForDoctorAsync(Guid doctorId, DateTime utcNow, CancellationToken cancellationToken) =>
+        dbContext.Appointments.CountAsync(x =>
+            x.DoctorId == doctorId
+            && x.StartTime > utcNow
+            && (x.Status == AppointmentStatus.Pending || x.Status == AppointmentStatus.Confirmed), cancellationToken);
+
     public void Update(Appointment appointment) => dbContext.Appointments.Update(appointment);
 }

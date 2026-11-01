@@ -1,0 +1,40 @@
+// Shared styles for the management list pages (Doctors, Patients, Services).
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--da-space-3);
+  margin-bottom: var(--da-space-3);
+  flex-wrap: wrap;
+}
+
+.search {
+  max-width: 360px;
+  flex: 1 1 240px;
+}
+
+.count {
+  color: var(--da-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--da-ink-2);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

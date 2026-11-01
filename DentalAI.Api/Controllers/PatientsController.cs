@@ -12,6 +12,11 @@ public sealed class PatientsController(IPatientService patientService) : ApiCont
     public async Task<IActionResult> GetAll([FromQuery] Guid? clinicId, CancellationToken cancellationToken) =>
         HandleResult(await patientService.ListAsync(clinicId, cancellationToken));
 
+    /// <summary>Paged patient search by name, phone or email.</summary>
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] PatientSearchQuery query, CancellationToken cancellationToken) =>
+        HandleResult(await patientService.SearchAsync(query, cancellationToken));
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await patientService.GetByIdAsync(id, cancellationToken));

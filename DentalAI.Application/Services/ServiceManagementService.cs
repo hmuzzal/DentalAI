@@ -9,6 +9,7 @@ namespace DentalAI.Application.Services;
 
 public sealed class ServiceManagementService(
     IServiceRepository serviceRepository,
+    IClinicRepository clinicRepository,
     ICurrentUserService currentUserService,
     IUnitOfWork unitOfWork,
     IMapper mapper) : IServiceManagementService
@@ -29,14 +30,22 @@ public sealed class ServiceManagementService(
 
     public async Task<Result<ServiceDto>> CreateAsync(UpsertServiceRequest request, CancellationToken cancellationToken)
     {
-        if (!currentUserService.ClinicId.HasValue)
+        var clinicId = currentUserService.IsSuperAdmin ? request.ClinicId : currentUserService.ClinicId;
+        if (!clinicId.HasValue)
         {
-            return Result<ServiceDto>.Fail(ResultStatus.Forbidden, "Clinic context is required.");
+            return currentUserService.IsSuperAdmin
+                ? Result<ServiceDto>.Fail(ResultStatus.ValidationError, "Choose the clinic for this service.")
+                : Result<ServiceDto>.Fail(ResultStatus.Forbidden, "Clinic context is required.");
+        }
+
+        if (await clinicRepository.GetByIdAsync(clinicId.Value, cancellationToken) is null)
+        {
+            return Result<ServiceDto>.Fail(ResultStatus.NotFound, "Clinic was not found.");
         }
 
         var service = new DentalAI.Domain.Entities.Service
         {
-            ClinicId = currentUserService.ClinicId.Value,
+            ClinicId = clinicId.Value,
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
             Price = request.Price,

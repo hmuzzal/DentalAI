@@ -159,7 +159,7 @@ gateways, local clinic workflows).
 - [ ] Angular initial bundle is 1.70 MB, over the 1.5 MB budget (build warning). Likely ng-zorro and the chart
   library on first load; lazy-load or trim imports.
 - [ ] Migration `20260622093000_BackfillClinicTimeZone` has no `.Designer.cs`, so EF never runs it.
-- [ ] i18n: only the clinic form is marked up (`i18n` / `$localize`). Run `pnpm extract-i18n` to update
+- [ ] i18n: only the clinic form is marked up (`i18n` / `$localize`); the Doctors, Patients and Services screens are not yet. Run `pnpm extract-i18n` to update
   `src/locale/messages.xlf`; mark other screens as they are touched.
 
 ## 8. Phase plans
@@ -192,7 +192,17 @@ gateways, local clinic workflows).
 - [x] 3. Fixes: menu icons, dashboard developer notes removed, dashboard uses the scheduling stats and revenue chart,
       route-based tab titles, favicon, global HTTP error toasts, seed login shown in development only
 - [x] "+ New appointment" header button
-- [ ] 4. Management pages: search, paging, add/edit side panel (Doctors, Patients, Services, Clinics)
+- [x] 4. Management pages: search, paging, add/edit side panel (Doctors, Patients, Services, Clinics) (2026-11-01)
+  - Shared `app-form-drawer` (title, Cancel/Save footer, inline save error, full width on phones) and `shared/forms.ts`.
+  - Doctors and Services: client-side search and paging (20 per page); Services also filter Active/Inactive.
+  - Patients: server-side search (every word must match name, phone or email) and paging via
+    `GET /patients/search?search=&page=&pageSize=` (max 100), because patient lists grow without limit.
+  - Delete with a confirm popover (soft delete). Deleting a doctor with upcoming Pending/Confirmed appointments
+    returns 409 with the count. Super admins get a Clinic column and pick the clinic when adding.
+  - API: doctor `clinicId` is optional like patients' (clinic users always get their own clinic); super admins
+    can create services (`UpsertServiceRequest.ClinicId`).
+  - Checked in the browser as a super admin (add, edit, search, paging, page size, delete, empty states).
+    Not checked as a clinic admin (the dev database's clinic-admin login was rejected).
 - [ ] 5. Merge Appointments and Calendar; rebuild Doctor schedules as a weekly grid
 - [x] 6. Booking flow (= Phase 1 gap 1). Also: ng-zorro locale set to English (it defaulted to Chinese)
 

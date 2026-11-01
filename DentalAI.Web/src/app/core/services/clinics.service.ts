@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
+import { silentErrors } from '../../shared/forms';
 import { ApiResponse } from '../models/api-response.model';
 import { Clinic, ClinicRequest } from '../models/clinic.models';
 import { API_BASE_URL } from '../tokens/api-base-url.token';
@@ -18,13 +19,13 @@ export class ClinicsService {
 
   create(request: ClinicRequest): Observable<Clinic> {
     return this.http
-      .post<ApiResponse<Clinic>>(`${this.apiBaseUrl}/clinics`, request)
+      .post<ApiResponse<Clinic>>(`${this.apiBaseUrl}/clinics`, request, silentErrors())
       .pipe(map((response) => response.data));
   }
 
   update(id: string, request: ClinicRequest): Observable<Clinic> {
     return this.http
-      .put<ApiResponse<Clinic>>(`${this.apiBaseUrl}/clinics/${id}`, request)
+      .put<ApiResponse<Clinic>>(`${this.apiBaseUrl}/clinics/${id}`, request, silentErrors())
       .pipe(map((response) => response.data));
   }
 }

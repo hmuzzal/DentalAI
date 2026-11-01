@@ -8,6 +8,10 @@ public interface IPatientRepository
     Task<Patient?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Patient>> ListAsync(Guid? clinicId, CancellationToken cancellationToken);
     Task<int> CountAsync(CancellationToken cancellationToken);
+
+    /// <summary>A page of patients whose name, phone or email contains <paramref name="search"/>, plus the total match count.</summary>
+    Task<(IReadOnlyList<Patient> Items, int TotalCount)> SearchAsync(
+        Guid? clinicId, string? search, int page, int pageSize, CancellationToken cancellationToken);
     void Update(Patient patient);
     void Remove(Patient patient);
 }

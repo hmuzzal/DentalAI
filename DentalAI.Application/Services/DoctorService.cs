@@ -11,6 +11,8 @@ namespace DentalAI.Application.Services;
 public sealed class DoctorService(
     IDoctorRepository doctorRepository,
     IClinicRepository clinicRepository,
+    IAppointmentRepository appointmentRepository,
+    IDateTimeProvider dateTimeProvider,
     ICurrentUserService currentUserService,
     IUnitOfWork unitOfWork,
     IMapper mapper) : IDoctorService
@@ -99,6 +101,13 @@ public sealed class DoctorService(
         if (doctor is null)
         {
             return Result.Fail(ResultStatus.NotFound, "Doctor was not found.");
+        }
+
+        var upcoming = await appointmentRepository.CountUpcomingForDoctorAsync(doctor.Id, dateTimeProvider.UtcNow, cancellationToken);
+        if (upcoming > 0)
+        {
+            return Result.Fail(ResultStatus.Conflict,
+                $"{doctor.FirstName} {doctor.LastName} has {upcoming} upcoming appointment{(upcoming == 1 ? "" : "s")}. Cancel or reschedule them before deleting this doctor.");
         }
 
         doctorRepository.Remove(doctor);

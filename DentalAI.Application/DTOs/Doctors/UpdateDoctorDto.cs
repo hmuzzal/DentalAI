@@ -2,7 +2,8 @@ namespace DentalAI.Application.DTOs.Doctors;
 
 public sealed class UpdateDoctorDto
 {
-    public Guid ClinicId { get; set; }
+    /// <summary>Super admins only: the doctor's clinic. Clinic users always get their own clinic.</summary>
+    public Guid? ClinicId { get; set; }
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Specialty { get; set; } = string.Empty;

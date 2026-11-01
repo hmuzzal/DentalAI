@@ -21,6 +21,17 @@ public sealed class PatientService(
         return Result<IReadOnlyList<PatientDto>>.Ok(mapper.Map<IReadOnlyList<PatientDto>>(patients));
     }
 
+    public async Task<Result<PagedResult<PatientDto>>> SearchAsync(PatientSearchQuery query, CancellationToken cancellationToken)
+    {
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, PatientSearchQuery.MaxPageSize);
+        var (items, total) = await patientRepository.SearchAsync(
+            ResolveClinicId(query.ClinicId), query.Search, page, pageSize, cancellationToken);
+
+        return Result<PagedResult<PatientDto>>.Ok(
+            new PagedResult<PatientDto>(mapper.Map<IReadOnlyList<PatientDto>>(items), total, page, pageSize));
+    }
+
     public async Task<Result<PatientDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         var patient = await patientRepository.GetByIdAsync(id, cancellationToken);
