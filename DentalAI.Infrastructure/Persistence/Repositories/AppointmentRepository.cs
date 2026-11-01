@@ -14,6 +14,7 @@ public sealed class AppointmentRepository(ApplicationDbContext dbContext) : IApp
             .Include(x => x.Doctor)
             .Include(x => x.Patient)
             .Include(x => x.Service)
+            .Include(x => x.Clinic)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<Appointment>> ListAsync(Guid? clinicId, CancellationToken cancellationToken)
@@ -23,6 +24,7 @@ public sealed class AppointmentRepository(ApplicationDbContext dbContext) : IApp
             .Include(x => x.Doctor)
             .Include(x => x.Patient)
             .Include(x => x.Service)
+            .Include(x => x.Clinic)
             .AsQueryable();
 
         if (clinicId.HasValue)
@@ -43,9 +45,6 @@ public sealed class AppointmentRepository(ApplicationDbContext dbContext) : IApp
             && (!excludedAppointmentId.HasValue || x.Id != excludedAppointmentId.Value)
             && startUtc < x.EndTime
             && endUtc > x.StartTime, cancellationToken);
-
-    public Task<int> CountTodayAsync(DateTime dayStartUtc, DateTime dayEndUtc, CancellationToken cancellationToken) =>
-        dbContext.Appointments.CountAsync(x => x.StartTime >= dayStartUtc && x.StartTime < dayEndUtc, cancellationToken);
 
     public Task<int> CountUpcomingAsync(DateTime utcNow, CancellationToken cancellationToken) =>
         dbContext.Appointments.CountAsync(x =>

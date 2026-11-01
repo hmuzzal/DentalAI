@@ -34,6 +34,9 @@ import { LoadStatus } from './remote-data';
         @if (empty()) {
           <div class="state state--center">
             <nz-empty [nzNotFoundContent]="emptyText()" />
+            @if (emptyActionText()) {
+              <button nz-button nzType="primary" (click)="emptyAction.emit()">{{ emptyActionText() }}</button>
+            }
           </div>
         } @else {
           <ng-content />
@@ -54,5 +57,8 @@ export class PageStateComponent {
   readonly emptyText = input('Nothing here yet');
   readonly errorText = input('We could not load this data.');
   readonly rows = input(4);
+  /** Optional call to action under the empty message, e.g. "Book appointment". */
+  readonly emptyActionText = input<string>();
   readonly retry = output<void>();
+  readonly emptyAction = output<void>();
 }

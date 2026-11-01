@@ -22,7 +22,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           authState.logout();
         }
       } else {
-        messages.error(describeError(error));
+        messages.error(describeHttpError(error));
       }
 
       return throwError(() => error);
@@ -30,7 +30,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
-function describeError(error: HttpErrorResponse): string {
+/** User-facing text for a failed API call. */
+export function describeHttpError(error: HttpErrorResponse): string {
   if (error.status === 0) {
     return 'Cannot reach the server. Check your connection and try again.';
   }

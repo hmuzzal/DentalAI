@@ -13,6 +13,8 @@ import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { filter, map } from 'rxjs';
 import { USER_ROLE_LABELS, UserRole } from '../core/models/auth.models';
 import { AuthStateService } from '../core/services/auth-state.service';
+import { BookingService } from '../core/services/booking.service';
+import { BookingDrawerComponent } from '../features/appointments/booking-drawer.component';
 import { timeZoneLabel } from '../core/time-zone';
 
 interface NavItem {
@@ -55,6 +57,7 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
   selector: 'app-shell',
   standalone: true,
   imports: [
+    BookingDrawerComponent,
     NgTemplateOutlet,
     RouterOutlet,
     RouterLink,
@@ -125,22 +128,28 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
             </div>
           </div>
 
-          <button class="user" nz-dropdown [nzDropdownMenu]="userMenu" nzTrigger="click" nzPlacement="bottomRight"
-                  aria-label="Account menu">
-            <nz-avatar [nzText]="initials()" [nzSize]="32" class="user__avatar" />
-            <span class="user__text">
-              <strong>{{ authState.user()?.fullName }}</strong>
-              <small>{{ roleLabel() }}</small>
-            </span>
-            <span nz-icon nzType="down" class="user__caret"></span>
-          </button>
-          <nz-dropdown-menu #userMenu="nzDropdownMenu">
-            <ul nz-menu>
-              <li nz-menu-item nzDisabled class="user-menu__email">{{ authState.user()?.email }}</li>
-              <li nz-menu-divider></li>
-              <li nz-menu-item (click)="authState.logout()"><span nz-icon nzType="logout"></span> Sign out</li>
-            </ul>
-          </nz-dropdown-menu>
+          <div class="shell__actions">
+            <button nz-button nzType="primary" (click)="booking.open()" aria-label="New appointment">
+              <span nz-icon nzType="plus"></span><span class="shell__action-text">New appointment</span>
+            </button>
+
+            <button class="user" nz-dropdown [nzDropdownMenu]="userMenu" nzTrigger="click" nzPlacement="bottomRight"
+                    aria-label="Account menu">
+              <nz-avatar [nzText]="initials()" [nzSize]="32" class="user__avatar" />
+              <span class="user__text">
+                <strong>{{ authState.user()?.fullName }}</strong>
+                <small>{{ roleLabel() }}</small>
+              </span>
+              <span nz-icon nzType="down" class="user__caret"></span>
+            </button>
+            <nz-dropdown-menu #userMenu="nzDropdownMenu">
+              <ul nz-menu>
+                <li nz-menu-item nzDisabled class="user-menu__email">{{ authState.user()?.email }}</li>
+                <li nz-menu-divider></li>
+                <li nz-menu-item (click)="authState.logout()"><span nz-icon nzType="logout"></span> Sign out</li>
+              </ul>
+            </nz-dropdown-menu>
+          </div>
         </nz-header>
 
         <nz-content class="shell__content">
@@ -148,6 +157,8 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
         </nz-content>
       </nz-layout>
     </nz-layout>
+
+    <app-booking-drawer />
   `,
   styles: [`
     :host { display: block; }
@@ -184,6 +195,8 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
     .clinic__name { color: var(--da-ink); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .clinic__tz { display: inline-flex; align-items: center; gap: 6px; color: var(--da-ink-3); font-size: 13px; white-space: nowrap; }
 
+    .shell__actions { display: flex; align-items: center; gap: var(--da-space-3); flex: none; }
+    .shell__action-text { margin-left: 6px; }
     .user { display: flex; align-items: center; gap: var(--da-space-2); padding: 4px 8px; border: 0; border-radius: var(--da-radius);
       background: transparent; cursor: pointer; color: inherit; font: inherit; }
     .user:hover, .user:focus-visible { background: var(--da-surface-2); }
@@ -200,7 +213,7 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
       .shell__content { padding: var(--da-space-4); }
     }
     @media (max-width: 640px) {
-      .clinic__tz, .user__text, .user__caret { display: none; }
+      .clinic__tz, .user__text, .user__caret, .shell__action-text { display: none; }
       .shell__content { padding: var(--da-space-3); }
     }
   `],
@@ -208,6 +221,7 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
 })
 export class AppShellComponent {
   readonly authState = inject(AuthStateService);
+  readonly booking = inject(BookingService);
 
   readonly isMobile = toSignal(
     inject(BreakpointObserver).observe(MOBILE_QUERY).pipe(map((state) => state.matches)),

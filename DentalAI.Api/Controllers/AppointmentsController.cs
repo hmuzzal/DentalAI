@@ -16,8 +16,9 @@ public sealed class AppointmentsController(
         [FromQuery] Guid doctorId,
         [FromQuery] DateOnly date,
         [FromQuery] Guid serviceId,
+        [FromQuery] Guid? excludeAppointmentId,
         CancellationToken cancellationToken) =>
-        HandleResult(await schedulingService.GetAvailableSlotsAsync(doctorId, date, serviceId, cancellationToken));
+        HandleResult(await schedulingService.GetAvailableSlotsAsync(doctorId, date, serviceId, cancellationToken, excludeAppointmentId));
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken) =>
@@ -34,6 +35,18 @@ public sealed class AppointmentsController(
         if (result.Success)
         {
             logger.LogInformation("Appointment created for doctor {DoctorId} at {StartTime}", request.DoctorId, request.StartTime);
+        }
+
+        return HandleResult(result);
+    }
+
+    [HttpPost("{id:guid}/reschedule")]
+    public async Task<IActionResult> Reschedule(Guid id, [FromBody] RescheduleAppointmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await appointmentService.RescheduleAsync(id, request, cancellationToken);
+        if (result.Success)
+        {
+            logger.LogInformation("Appointment {AppointmentId} rescheduled to {StartTime}", id, request.StartTime);
         }
 
         return HandleResult(result);

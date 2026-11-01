@@ -2,6 +2,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideRouter, TitleStrategy } from '@angular/router';
+import { en_US, provideNzI18n } from 'ng-zorro-antd/i18n';
 import { provideNzIcons } from 'ng-zorro-antd/icon';
 import { authInterceptor } from './core/http/auth.interceptor';
 import { errorInterceptor } from './core/http/error.interceptor';
@@ -17,6 +18,8 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
     provideRouter(routes),
     { provide: TitleStrategy, useClass: PageTitleStrategy },
-    provideNzIcons(APP_ICONS)
+    provideNzIcons(APP_ICONS),
+    // English UI strings for ng-zorro (date pickers, pagination, empty states). Its default is zh_CN.
+    provideNzI18n(en_US)
   ]
 };

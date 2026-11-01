@@ -14,6 +14,8 @@ export interface CalendarAppointment {
   startTimeUtc: string;
   endTimeUtc: string;
   status: AppointmentStatus;
+  /** IANA zone of the appointment's clinic; show its times in this zone. */
+  clinicTimeZone?: string | null;
 }
 
 export interface CalendarResponse {

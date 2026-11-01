@@ -52,10 +52,10 @@ public sealed class SchedulingService(
         return Result<DoctorAvailabilityDto>.Ok(await MapAsync(doctorId, cancellationToken), "Doctor availability saved successfully.");
     }
 
-    public async Task<Result<IReadOnlyList<AvailableSlotDto>>> GetAvailableSlotsAsync(Guid doctorId, DateOnly date, Guid serviceId, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<AvailableSlotDto>>> GetAvailableSlotsAsync(Guid doctorId, DateOnly date, Guid serviceId, CancellationToken cancellationToken, Guid? excludeAppointmentId = null)
     {
         var service = await serviceRepository.GetByIdAsync(serviceId, cancellationToken);
-        var snapshot = await schedulingRepository.GetSnapshotAsync(doctorId, date, cancellationToken);
+        var snapshot = await schedulingRepository.GetSnapshotAsync(doctorId, date, cancellationToken, excludeAppointmentId);
         if (snapshot is null || !currentUserService.CanAccessClinic(snapshot.ClinicId))
             return Result<IReadOnlyList<AvailableSlotDto>>.Fail(ResultStatus.NotFound, "Doctor was not found for the current clinic.");
         if (service is null || service.ClinicId != snapshot.ClinicId || !service.IsActive)
@@ -64,7 +64,7 @@ public sealed class SchedulingService(
         return Result<IReadOnlyList<AvailableSlotDto>>.Ok(engine.GenerateSlots(snapshot, service.DurationMinutes, dateTimeProvider.UtcNow));
     }
 
-    public async Task<Result> ValidateAppointmentAsync(Guid doctorId, DateTime startUtc, DateTime endUtc, CancellationToken cancellationToken)
+    public async Task<Result> ValidateAppointmentAsync(Guid doctorId, DateTime startUtc, DateTime endUtc, CancellationToken cancellationToken, Guid? excludeAppointmentId = null)
     {
         var doctor = await doctorRepository.GetByIdAsync(doctorId, cancellationToken);
         if (doctor is null || !currentUserService.CanAccessClinic(doctor.ClinicId))
@@ -73,7 +73,7 @@ public sealed class SchedulingService(
         var timeZone = SchedulingEngine.ResolveTimeZone(doctor.Clinic?.TimeZone);
         var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
             DateTime.SpecifyKind(startUtc, DateTimeKind.Utc), timeZone));
-        var snapshot = await schedulingRepository.GetSnapshotAsync(doctorId, localDate, cancellationToken);
+        var snapshot = await schedulingRepository.GetSnapshotAsync(doctorId, localDate, cancellationToken, excludeAppointmentId);
         if (snapshot is null) return Result.Fail(ResultStatus.NotFound, "Doctor schedule was not found.");
         var errors = engine.Validate(snapshot, startUtc, endUtc);
         return errors.Count == 0

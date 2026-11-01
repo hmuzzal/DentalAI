@@ -13,4 +13,21 @@ export interface Appointment {
   endTime: string;
   status: AppointmentStatus;
   notes?: string | null;
+  /** IANA zone of the appointment's clinic; show its times in this zone. */
+  clinicTimeZone?: string | null;
+}
+
+export interface CreateAppointmentRequest {
+  doctorId: string;
+  patientId: string;
+  serviceId: string;
+  /** UTC instant, e.g. an AvailableSlot.startTimeUtc. */
+  startTime: string;
+  notes?: string | null;
+}
+
+export interface RescheduleAppointmentRequest {
+  /** New UTC start, e.g. an AvailableSlot.startTimeUtc. */
+  startTime: string;
+  notes?: string | null;
 }

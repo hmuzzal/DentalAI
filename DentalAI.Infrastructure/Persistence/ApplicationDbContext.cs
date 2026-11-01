@@ -28,6 +28,20 @@ public sealed class ApplicationDbContext(
     private Guid? CurrentClinicId => currentUserService.ClinicId;
     private bool BypassTenantFilter => currentUserService.IsSuperAdmin;
 
+    /// <summary>
+    /// Every DateTime column stores UTC. SQL Server's datetime2 has no kind, so mark values read back as UTC;
+    /// otherwise they serialize without a "Z" and clients parse them as local time.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+        configurationBuilder.Properties<DateTime?>().HaveConversion<UtcDateTimeConverter>();
+    }
+
+    internal sealed class UtcDateTimeConverter() : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
+        value => value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : value,
+        value => DateTime.SpecifyKind(value, DateTimeKind.Utc));
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -58,6 +72,43 @@ public sealed class ApplicationDbContext(
                 $"A concurrency conflict occurred while saving changes. Entries: {string.Join(" | ", diagnostics)}",
                 exception);
         }
+    }
+
+    public async Task<T> RunWithDoctorScheduleLockAsync<T>(
+        Guid doctorId,
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken cancellationToken)
+    {
+        if (Database.CurrentTransaction is not null)
+        {
+            throw new InvalidOperationException("The doctor schedule lock must not be nested inside another transaction.");
+        }
+
+        await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+
+        // Transaction-owned app lock: released automatically on commit, rollback or connection loss.
+        // Every booking write for this doctor takes the same lock, so availability checks see committed data.
+        var lockResult = new Microsoft.Data.SqlClient.SqlParameter("@result", System.Data.SqlDbType.Int)
+        {
+            Direction = System.Data.ParameterDirection.Output
+        };
+        var resource = new Microsoft.Data.SqlClient.SqlParameter("@resource", System.Data.SqlDbType.NVarChar, 255)
+        {
+            Value = $"dentalai:doctor-schedule:{doctorId:N}"
+        };
+        await Database.ExecuteSqlRawAsync(
+            "EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;",
+            [resource, lockResult],
+            cancellationToken);
+
+        if (lockResult.Value is not int code || code < 0)
+        {
+            throw new TimeoutException("The doctor's schedule is busy. Please try again.");
+        }
+
+        var result = await work(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
     }
 
     private void ApplyAuditInformation()

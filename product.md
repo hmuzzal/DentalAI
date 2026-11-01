@@ -103,21 +103,35 @@ gateways, local clinic workflows).
    restores its index and FK. Verified: the column survives API startup, and `/appointments` and
    `/dashboard/scheduling` return 200.
    (Still open: migration `20260622093000_BackfillClinicTimeZone` has no `.Designer.cs`, so EF never runs it.)
-1. **No booking UI.** `time-slot-selector` exists but no screen uses it, and the Angular
-   appointments service has no `create` call. Receptionists cannot book from the web app.
-2. **No reschedule.** There is no endpoint to move an appointment to a new slot.
-3. **Double-booking race.** Validation and insert are not atomic, so two concurrent
-   requests can book the same slot. Needs a serializable transaction or an app lock per doctor.
-4. **Times shown in browser time, not clinic time.** The `date` pipes use the browser's
-   zone, so a New York clinic viewed from another zone shows wrong times.
+1. ~~**No booking UI.**~~ ✅ Fixed 2026-11-01: "New appointment" drawer (header button, per-day "+" on
+   Appointments and Calendar, empty-state actions). Conflicts show inline and reload the slots.
+2. ~~**No reschedule.**~~ ✅ Fixed 2026-11-01: `POST /appointments/{id}/reschedule` (same doctor and service; Pending or
+   Confirmed only; status kept). "Reschedule" on the Appointments table and Calendar cards opens the drawer in
+   reschedule mode; `available-slots?excludeAppointmentId=` stops the appointment blocking its own slots.
+3. ~~**Double-booking race.**~~ ✅ Fixed 2026-11-01: create and reschedule validate and save inside
+   `IUnitOfWork.RunWithDoctorScheduleLockAsync` (transaction + `sp_getapplock` per doctor). Before: 8 parallel
+   bookings of one slot all succeeded. After: 1 succeeds, the rest get 409 (also checked with 20).
+4. **Times shown in browser time, not clinic time.** Mostly fixed 2026-11-01: dashboard, Appointments,
+   Calendar and booking format and group by the user's clinic zone (`core/time-zone.ts`). The API now
+   returns DateTimes as UTC (`Z`); before, EF read them back with no kind, so browsers parsed them as local time.
+   Booking and rescheduling use the selected doctor's clinic zone (`DoctorDto.ClinicTimeZone`), so platform
+   admins book correctly for any clinic.
+   Appointment and calendar DTOs now carry `ClinicTimeZone`; the Appointments, Calendar and dashboard lists show
+   each appointment in its own clinic's zone, tagged (e.g. "9:00 AM EST") when it differs from the viewer's.
+   ✅ 2026-11-01: the calendar opens on (and its "Today" button returns to) the clinic's today, not the browser's.
 5. **Clinic time-zone picker.** The clinic form has no time-zone selector (it should be a
    dropdown of IANA zones, defaulting to US zones). The validator does not check that the zone ID is real.
 6. **DST edge cases.** `ToUtc` throws on local times that don't exist during the
    spring-forward hour, and repeated fall-back times are ambiguous. Needs handling and tests.
-7. **Dashboard revenue grouped by UTC date** instead of clinic-local date.
+7. ~~**Dashboard revenue grouped by UTC date.**~~ ✅ Fixed 2026-11-01: `DashboardCalculator` counts "today" and buckets revenue
+   by day/month in each appointment's clinic zone (7 unit tests); the chart window ends on the clinic's today.
+   Note: revenue now aggregates up to 12 months of completed appointments in memory; move to SQL if volumes grow.
 8. **Slot interval hard-coded at 15 minutes.** It should be a clinic setting.
-9. **Test coverage.** Only 4 engine tests. Missing: DST, multiple time zones, service and
-   appointment validation, tenant isolation.
+9. **Test coverage.** 4 engine unit tests, plus 11 API integration tests (2026-11-01,
+   `DentalAI.Api.IntegrationTests`): concurrent booking and rescheduling, the per-doctor lock, reschedule rules,
+   slot exclusion, cancel, clinic zone on DTOs. They boot the real API on a throwaway SQL Server database
+   (`DENTALAI_TEST_SQLSERVER`, default "."). Disabling the lock makes the 3 concurrency tests fail, as it should.
+   Still missing: DST, multiple time zones, tenant isolation.
 
 ### Technical debt / known issues (noted 2026-11-01, open until fixed)
 - [ ] **Security: vulnerable packages.** AutoMapper 13.0.1 (high, GHSA-rvv3-g6hj-g44x) and
@@ -126,7 +140,11 @@ gateways, local clinic workflows).
   environment variables or a key vault (prod), then rotate the key.
 - [ ] **`Program.cs` is ~980 lines of one-off DB patches.** The startup `AlignLegacy*Schema`
   raw-SQL methods should become migrations, or be deleted once all databases are migrated.
-- [x] **Build/cache folders in git.** `.dotnet-cli`, `.pnpm-store`, `.nuget`, `.buildtmp`,
+  2026-11-01: a fresh database could not be created at all (AddSchedulingEngine indexed a column the patches create
+  later; InitialCreate's required `Clinics.Slug` broke every clinic insert). Fixed: startup now migrates to
+  `SecureMultiTenantAuthAndPatientsV2`, runs the patches, then continues; migration `AllowNullClinicSlug`. The
+  integration tests now prove a fresh install works. Note: the filtered `IX_Clinics_Slug` index needs
+  QUOTED_IDENTIFIER ON for writes (SqlClient default; use `sqlcmd -I`).- [x] **Build/cache folders in git.** `.dotnet-cli`, `.pnpm-store`, `.nuget`, `.buildtmp`,
   `.appdata` and `.vs` show up in git. Add them to `.gitignore` and untrack them. ✅ Done 2026-11-01.
 - [ ] No Angular unit tests and no API integration tests.
 
@@ -134,19 +152,19 @@ gateways, local clinic workflows).
 
 ### Phase 1: finish the scheduling engine (next)
 **Backend**
-- [ ] Atomic booking: run validate + insert in a serializable transaction (or `sp_getapplock` keyed on DoctorId); return 409 on conflict
-- [ ] `POST /appointments/{id}/reschedule` (new start time, re-validated by the engine, excluding the appointment itself)
+- [x] Atomic booking: validate + insert under `sp_getapplock` keyed on DoctorId; 409 on conflict (2026-11-01)
+- [x] `POST /appointments/{id}/reschedule` (new start time, re-validated by the engine, excluding the appointment itself)
 - [ ] DST-safe `ToUtc`: skip non-existent local times, pick the first instance of ambiguous ones
 - [ ] Validate the clinic `TimeZone` as a real zone ID; endpoint `GET /lookups/time-zones` (US zones first)
 - [ ] Return the clinic time-zone ID with the slot, calendar and appointment DTOs
 - [ ] Clinic setting `SlotIntervalMinutes` (default 15)
-- [ ] Dashboard: group revenue by clinic-local date
+- [x] Dashboard: group revenue by clinic-local date (2026-11-01)
 - [ ] Tests: DST (America/New_York, March and November), multiple zones, overlap, leave, reschedule
 
 **Frontend**
-- [ ] Booking flow: patient → service → doctor → date → `time-slot-selector` → confirm
-- [ ] Reschedule and cancel actions from the calendar and appointments list
-- [ ] Time-zone-aware formatting: a shared pipe or helper that formats in the clinic's zone
+- [x] Booking flow: doctor → service → patient → date → `time-slot-selector` → confirm (2026-11-01)
+- [x] Reschedule and cancel actions from the calendar and appointments list (2026-11-01)
+- [x] Time-zone-aware formatting: helpers in `core/time-zone.ts` (`formatInZone`, `dateKeyInZone`)
 - [ ] Time-zone dropdown on the clinic form
 - [ ] i18n scaffold (Angular `$localize`); English as the source locale
 
@@ -159,10 +177,10 @@ gateways, local clinic workflows).
 - [x] 2. App shell: grouped nav, clinic name and time zone in the header, user menu, collapsible sidebar, mobile drawer
 - [x] 3. Fixes: menu icons, dashboard developer notes removed, dashboard uses the scheduling stats and revenue chart,
       route-based tab titles, favicon, global HTTP error toasts, seed login shown in development only
-- [ ] "+ New appointment" header button (arrives with the booking flow, step 6)
+- [x] "+ New appointment" header button
 - [ ] 4. Management pages: search, paging, add/edit side panel (Doctors, Patients, Services, Clinics)
 - [ ] 5. Merge Appointments and Calendar; rebuild Doctor schedules as a weekly grid
-- [ ] 6. Booking flow (= Phase 1 gap 1)
+- [x] 6. Booking flow (= Phase 1 gap 1). Also: ng-zorro locale set to English (it defaulted to Chinese)
 
 ### Phase 1.5: US readiness
 - Phone: normalise to E.164 (libphonenumber-csharp), default region from clinic country, US display format

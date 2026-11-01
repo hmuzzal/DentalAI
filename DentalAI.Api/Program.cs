@@ -200,16 +200,25 @@ using (var scope = app.Services.CreateScope())
                 pendingMigrations.Length,
                 pendingMigrations);
 
+            // The AlignLegacy*Schema patches below were written against the schema as of this migration, and
+            // later migrations (e.g. AddSchedulingEngine indexes Appointments.StartTime) assume they have run.
+            // On a database that hasn't reached it yet (a fresh install), stop there, align, then continue.
+            // Only ever migrate forward to it: MigrateAsync(target) would roll back a database that is past it.
+            const string legacyAlignmentBaseline = "20260621095058_SecureMultiTenantAuthAndPatientsV2";
+            if (pendingMigrations.Contains(legacyAlignmentBaseline))
+            {
+                await Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions
+                    .GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>(dbContext)
+                    .MigrateAsync(legacyAlignmentBaseline);
+                await AlignLegacySchemaAsync(dbContext, logger);
+            }
+
             await dbContext.Database.MigrateAsync();
 
             logger.LogInformation("Database migrations applied successfully.");
         }
 
-        await AlignLegacyClinicSchemaAsync(dbContext, logger, CancellationToken.None);
-        await AlignLegacyDoctorSchemaAsync(dbContext, logger, CancellationToken.None);
-        await AlignLegacyUserSchemaAsync(dbContext, logger, CancellationToken.None);
-        await AlignLegacyPatientSchemaAsync(dbContext, logger, CancellationToken.None);
-        await AlignLegacyAppointmentSchemaAsync(dbContext, logger, CancellationToken.None);
+        await AlignLegacySchemaAsync(dbContext, logger);
         var seeder = services.GetRequiredService<ApplicationDbContextSeeder>();
         await seeder.SeedAsync(CancellationToken.None);
         logger.LogInformation("Seed process completed successfully.");
@@ -241,6 +250,15 @@ app.Lifetime.ApplicationStarted.Register(() =>
 });
 
 app.Run();
+
+static async Task AlignLegacySchemaAsync(ApplicationDbContext dbContext, Microsoft.Extensions.Logging.ILogger logger)
+{
+    await AlignLegacyClinicSchemaAsync(dbContext, logger, CancellationToken.None);
+    await AlignLegacyDoctorSchemaAsync(dbContext, logger, CancellationToken.None);
+    await AlignLegacyUserSchemaAsync(dbContext, logger, CancellationToken.None);
+    await AlignLegacyPatientSchemaAsync(dbContext, logger, CancellationToken.None);
+    await AlignLegacyAppointmentSchemaAsync(dbContext, logger, CancellationToken.None);
+}
 
 static async Task AlignLegacyClinicSchemaAsync(
     ApplicationDbContext dbContext,
@@ -666,6 +684,23 @@ static async Task AlignLegacyAppointmentSchemaAsync(
                 DEALLOCATE clinic_cursor;
             END
 
+            -- Indexes on the legacy columns (e.g. InitialCreate's IX_Appointments_*_ScheduledStartUtc) block
+            -- dropping them, so drop those indexes first.
+            DECLARE @legacyIndexSql nvarchar(max) = N'';
+            SELECT @legacyIndexSql = @legacyIndexSql + N'DROP INDEX ' + QUOTENAME(i.name) + N' ON [dbo].[Appointments];'
+            FROM sys.indexes AS i
+            WHERE i.object_id = OBJECT_ID(N'dbo.Appointments')
+              AND i.is_primary_key = 0
+              AND EXISTS (
+                  SELECT 1
+                  FROM sys.index_columns AS ic
+                  INNER JOIN sys.columns AS c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                  WHERE ic.object_id = i.object_id
+                    AND ic.index_id = i.index_id
+                    AND c.name IN (N'PatientName', N'ScheduledStartUtc', N'ScheduledEndUtc'));
+            IF @legacyIndexSql <> N''
+                EXEC sp_executesql @legacyIndexSql;
+
             IF COL_LENGTH('dbo.Appointments', 'PatientName') IS NOT NULL
                 EXEC(N'
                 DECLARE @constraintName sysname;
@@ -955,3 +990,6 @@ static async Task EnsureColumnNullableAsync(
     alterCommand.CommandText = $"ALTER TABLE [dbo].[{tableName}] ALTER COLUMN [{columnName}] uniqueidentifier NULL";
     await alterCommand.ExecuteNonQueryAsync(cancellationToken);
 }
+
+/// <summary>Exposed so integration tests can host the API with WebApplicationFactory&lt;Program&gt;.</summary>
+public partial class Program;

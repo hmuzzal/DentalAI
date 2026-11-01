@@ -1,8 +1,7 @@
-import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { addDays, format, startOfDay, subDays } from 'date-fns';
+import { addDays, format, parseISO, subDays } from 'date-fns';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzIconModule } from 'ng-zorro-antd/icon';
@@ -15,6 +14,9 @@ import { Appointment } from '../../core/models/appointment.models';
 import { DashboardStats, SchedulingDashboard } from '../../core/models/dashboard.models';
 import { AppointmentsService } from '../../core/services/appointments.service';
 import { DashboardService } from '../../core/services/dashboard.service';
+import { AuthStateService } from '../../core/services/auth-state.service';
+import { BookingService, onAppointmentsChanged } from '../../core/services/booking.service';
+import { dateKeyInZone, effectiveTimeZone, formatAppointmentTime, formatInZone } from '../../core/time-zone';
 import { PageHeaderComponent } from '../../shared/page-header.component';
 import { PageStateComponent } from '../../shared/page-state.component';
 import { remoteData } from '../../shared/remote-data';
@@ -32,7 +34,6 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
   selector: 'app-dashboard-page',
   standalone: true,
   imports: [
-    DatePipe,
     FormsModule,
     RouterLink,
     NzButtonModule,
@@ -47,7 +48,7 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
   ],
   template: `
     <section class="da-page">
-      <app-page-header title="Dashboard" [subtitle]="todayLabel" />
+      <app-page-header title="Dashboard" [subtitle]="todayLabel()" />
 
       <app-page-state [status]="data.status()" (retry)="data.reload()" [rows]="2"
                       errorText="We could not load today's numbers.">
@@ -103,11 +104,12 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
             <ng-template #calendarLink><a routerLink="/calendar">Open calendar</a></ng-template>
 
             <app-page-state [status]="today.status()" [empty]="!today.value().length" (retry)="today.reload()"
-                            emptyText="No appointments today" [rows]="3">
+                            emptyText="No appointments today" [rows]="3"
+                            emptyActionText="Book appointment" (emptyAction)="booking.open()">
               <ul class="today__list">
                 @for (item of today.value(); track item.id) {
                   <li>
-                    <time>{{ item.startTime | date: 'h:mm a' }}</time>
+                    <time>{{ time(item) }}</time>
                     <div class="today__who">
                       <strong>{{ item.patientName }}</strong>
                       <span>{{ item.doctorName }} · {{ item.serviceName }}</span>
@@ -172,25 +174,47 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
 export class DashboardPageComponent {
   private readonly dashboardService = inject(DashboardService);
   private readonly appointmentsService = inject(AppointmentsService);
+  private readonly authState = inject(AuthStateService);
+  readonly booking = inject(BookingService);
 
   readonly status = APPOINTMENT_STATUS;
   readonly revenueDays = REVENUE_DAYS;
   readonly revenueViews = ['Chart', 'Table'];
   readonly revenueView = signal<'Chart' | 'Table'>('Chart');
-  readonly todayLabel = format(new Date(), 'EEEE, MMMM d');
+  readonly timeZone = computed(() => effectiveTimeZone(this.authState.user()?.clinicTimeZone));
+  readonly todayLabel = computed(() => formatInZone(new Date(), this.timeZone(), { weekday: 'long', month: 'long', day: 'numeric' }));
 
   readonly data = remoteData<DashboardData | null>(
     () => forkJoin({ stats: this.dashboardService.getStats(), scheduling: this.dashboardService.getScheduling() }),
     null
   );
 
-  // TODO(phase 1): use the clinic's time zone for "today" instead of the browser's.
+  /** "Today" is the clinic's calendar day: fetch a window around it, keep the clinic-local matches. */
+  // Each appointment counts as "today" by its own clinic's calendar (platform admins see several clinics).
+  // The 3-day window around the viewer's today covers every zone offset.
   readonly today = remoteData<Appointment[]>(() => {
-    const start = startOfDay(new Date());
+    const windowStart = subDays(parseISO(dateKeyInZone(new Date(), this.timeZone())), 1);
     return this.appointmentsService
-      .getAll(start.toISOString(), addDays(start, 1).toISOString())
-      .pipe(map((items) => [...items].sort((a, b) => a.startTime.localeCompare(b.startTime))));
+      .getAll(windowStart.toISOString(), addDays(windowStart, 3).toISOString())
+      .pipe(map((items) => items
+        .filter((item) => dateKeyInZone(item.startTime, this.zoneOf(item)) === dateKeyInZone(new Date(), this.zoneOf(item)))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime))));
   }, []);
+
+  constructor() {
+    onAppointmentsChanged(() => {
+      this.data.reload();
+      this.today.reload();
+    });
+  }
+
+  time(item: Appointment): string {
+    return formatAppointmentTime(item.startTime, this.zoneOf(item), this.timeZone(), { hour: 'numeric', minute: '2-digit' });
+  }
+
+  private zoneOf(item: Appointment): string {
+    return item.clinicTimeZone ? effectiveTimeZone(item.clinicTimeZone) : this.timeZone();
+  }
 
   readonly kpis = computed(() => {
     const s = this.data.value()?.scheduling;
@@ -213,9 +237,10 @@ export class DashboardPageComponent {
   });
 
   /** The API omits days with no revenue; fill every day of the window so gaps show as zero. */
+  // The window ends on the clinic's today, matching the server, which buckets revenue by clinic-local date.
   readonly revenueBars = computed<RevenueBar[]>(() => {
     const byDay = new Map((this.data.value()?.scheduling.revenueByDay ?? []).map((p) => [p.period, p.revenue]));
-    const end = startOfDay(new Date());
+    const end = parseISO(dateKeyInZone(new Date(), this.timeZone()));
     return Array.from({ length: REVENUE_DAYS }, (_, i) => {
       const day = subDays(end, REVENUE_DAYS - 1 - i);
       const key = format(day, 'yyyy-MM-dd');

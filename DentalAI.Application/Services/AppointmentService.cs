@@ -61,28 +61,79 @@ public sealed class AppointmentService(
         }
 
         var endTime = request.StartTime.AddMinutes(service.DurationMinutes);
-        var schedulingValidation = await schedulingService.ValidateAppointmentAsync(doctor.Id, request.StartTime, endTime, cancellationToken);
-        if (!schedulingValidation.Success)
-            return Result<AppointmentDto>.Fail(schedulingValidation.Status, schedulingValidation.Message, schedulingValidation.Errors);
 
-        var appointment = new Appointment
+        // Check-then-insert under the doctor's schedule lock, so concurrent requests can't both take the slot.
+        return await unitOfWork.RunWithDoctorScheduleLockAsync(doctor.Id, async ct =>
         {
-            ClinicId = doctor.ClinicId,
-            DoctorId = doctor.Id,
-            PatientId = patient.Id,
-            ServiceId = service.Id,
-            StartTime = request.StartTime,
-            EndTime = endTime,
-            Notes = request.Notes?.Trim(),
-            Doctor = doctor,
-            Patient = patient
-            ,Service = service
-        };
+            var schedulingValidation = await schedulingService.ValidateAppointmentAsync(doctor.Id, request.StartTime, endTime, ct);
+            if (!schedulingValidation.Success)
+                return Result<AppointmentDto>.Fail(schedulingValidation.Status, schedulingValidation.Message, schedulingValidation.Errors);
 
-        await appointmentRepository.AddAsync(appointment, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+            var appointment = new Appointment
+            {
+                ClinicId = doctor.ClinicId,
+                DoctorId = doctor.Id,
+                PatientId = patient.Id,
+                ServiceId = service.Id,
+                StartTime = request.StartTime,
+                EndTime = endTime,
+                Notes = request.Notes?.Trim(),
+                Doctor = doctor,
+                Patient = patient,
+                Service = service
+            };
 
-        return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment created successfully.");
+            await appointmentRepository.AddAsync(appointment, ct);
+            await unitOfWork.SaveChangesAsync(ct);
+
+            return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment created successfully.");
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Moves an appointment to a new start time with the same doctor and service. The length follows the
+    /// service's current duration, and the status is kept.
+    /// </summary>
+    public async Task<Result<AppointmentDto>> RescheduleAsync(Guid id, RescheduleAppointmentRequest request, CancellationToken cancellationToken)
+    {
+        if (request.StartTime <= dateTimeProvider.UtcNow)
+        {
+            return Result<AppointmentDto>.Fail(ResultStatus.ValidationError, "Appointments cannot be moved into the past.");
+        }
+
+        var appointment = await appointmentRepository.GetByIdAsync(id, cancellationToken);
+        if (appointment is null || !currentUserService.CanAccessClinic(appointment.ClinicId))
+        {
+            return Result<AppointmentDto>.Fail(ResultStatus.NotFound, "Appointment was not found.");
+        }
+
+        if (appointment.Status is not (AppointmentStatus.Pending or AppointmentStatus.Confirmed))
+        {
+            return Result<AppointmentDto>.Fail(ResultStatus.Conflict, "Only pending or confirmed appointments can be rescheduled.");
+        }
+
+        var durationMinutes = appointment.Service?.DurationMinutes
+            ?? (int)(appointment.EndTime - appointment.StartTime).TotalMinutes;
+        var endTime = request.StartTime.AddMinutes(durationMinutes);
+
+        return await unitOfWork.RunWithDoctorScheduleLockAsync(appointment.DoctorId, async ct =>
+        {
+            // Ignore the appointment itself, or it would block its own neighbouring slots.
+            var schedulingValidation = await schedulingService.ValidateAppointmentAsync(
+                appointment.DoctorId, request.StartTime, endTime, ct, excludeAppointmentId: appointment.Id);
+            if (!schedulingValidation.Success)
+                return Result<AppointmentDto>.Fail(schedulingValidation.Status, schedulingValidation.Message, schedulingValidation.Errors);
+
+            appointment.StartTime = request.StartTime;
+            appointment.EndTime = endTime;
+            if (!string.IsNullOrWhiteSpace(request.Notes))
+            {
+                appointment.Notes = request.Notes.Trim();
+            }
+
+            await unitOfWork.SaveChangesAsync(ct);
+            return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment rescheduled successfully.");
+        }, cancellationToken);
     }
 
     public Task<Result<AppointmentDto>> ConfirmAsync(Guid id, UpdateAppointmentStatusRequest request, CancellationToken cancellationToken) =>

@@ -1,4 +1,5 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
+import { SILENT_ERRORS } from '../http/http-context';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse } from '../models/api-response.model';
@@ -23,9 +24,13 @@ export class SchedulingService {
       .pipe(map((response) => response.data));
   }
 
-  getAvailableSlots(doctorId: string, date: string, serviceId: string): Observable<AvailableSlot[]> {
-    const params = new HttpParams().set('doctorId', doctorId).set('date', date).set('serviceId', serviceId);
-    return this.http.get<ApiResponse<AvailableSlot[]>>(`${this.apiBaseUrl}/appointments/available-slots`, { params })
+  /** Errors are silent: the slot picker shows its own error state. */
+  getAvailableSlots(doctorId: string, date: string, serviceId: string, excludeAppointmentId?: string | null): Observable<AvailableSlot[]> {
+    let params = new HttpParams().set('doctorId', doctorId).set('date', date).set('serviceId', serviceId);
+    // When rescheduling, the appointment being moved must not block its own neighbouring slots.
+    if (excludeAppointmentId) params = params.set('excludeAppointmentId', excludeAppointmentId);
+    const context = new HttpContext().set(SILENT_ERRORS, true);
+    return this.http.get<ApiResponse<AvailableSlot[]>>(`${this.apiBaseUrl}/appointments/available-slots`, { params, context })
       .pipe(map((response) => response.data));
   }
 

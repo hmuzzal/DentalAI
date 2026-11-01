@@ -13,7 +13,7 @@ public sealed class DoctorRepository(ApplicationDbContext dbContext) : IDoctorRe
 
     public async Task<IReadOnlyList<Doctor>> ListAsync(Guid? clinicId, CancellationToken cancellationToken)
     {
-        var query = dbContext.Doctors.AsNoTracking().AsQueryable();
+        var query = dbContext.Doctors.AsNoTracking().Include(x => x.Clinic).AsQueryable();
 
         if (clinicId.HasValue)
         {

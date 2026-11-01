@@ -21,7 +21,8 @@ public sealed class ApplicationMappingProfile : Profile
             .ForMember(dest => dest.ClinicName, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.Name : null))
             .ForMember(dest => dest.ClinicTimeZone, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.TimeZone : null));
 
-        CreateMap<Doctor, DoctorDto>();
+        CreateMap<Doctor, DoctorDto>()
+            .ForMember(dest => dest.ClinicTimeZone, opt => opt.MapFrom(src => src.Clinic != null ? src.Clinic.TimeZone : null));
 
         CreateMap<DentalAI.Domain.Entities.Service, ServiceDto>();
 
@@ -34,6 +35,11 @@ public sealed class ApplicationMappingProfile : Profile
             .ForMember(dest => dest.DoctorName, opt => opt.MapFrom(src =>
                 src.Doctor != null ? $"{src.Doctor.FirstName} {src.Doctor.LastName}".Trim() : string.Empty))
             .ForMember(dest => dest.ServiceName, opt => opt.MapFrom(src =>
-                src.Service != null ? src.Service.Name : string.Empty));
+                src.Service != null ? src.Service.Name : string.Empty))
+            // A just-created appointment has its doctor (with clinic) loaded but not its own Clinic.
+            .ForMember(dest => dest.ClinicTimeZone, opt => opt.MapFrom(src =>
+                src.Clinic != null ? src.Clinic.TimeZone
+                : src.Doctor != null && src.Doctor.Clinic != null ? src.Doctor.Clinic.TimeZone
+                : null));
     }
 }

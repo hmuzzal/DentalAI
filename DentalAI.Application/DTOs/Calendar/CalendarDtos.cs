@@ -15,6 +15,8 @@ public sealed record CalendarAppointmentDto(
     string ServiceName,
     DateTime StartTimeUtc,
     DateTime EndTimeUtc,
-    AppointmentStatus Status);
+    AppointmentStatus Status,
+    /// <summary>IANA time zone of the appointment's clinic; clients show times in it.</summary>
+    string? ClinicTimeZone);
 
 public sealed record CalendarDto(DateOnly FromDate, DateOnly ToDate, IReadOnlyList<CalendarAppointmentDto> Appointments);

@@ -16,4 +16,7 @@ public sealed class AppointmentDto
     public DateTime EndTime { get; set; }
     public string? Notes { get; set; }
     public AppointmentStatus Status { get; set; }
+
+    /// <summary>IANA time zone of the appointment's clinic; clients show times in it.</summary>
+    public string? ClinicTimeZone { get; set; }
 }
