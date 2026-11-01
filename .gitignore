@@ -480,3 +480,11 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local tool caches and build scratch folders (never commit)
+.artifacts/
+.buildtmp/
+.pnpm-store/
+.dotnet-cli/
+.nuget/
+.appdata/
