@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "extract-i18n": "ng extract-i18n --output-path src/locale"
   },
   "prettier": {
     "printWidth": 100,
@@ -35,6 +36,7 @@
     "@angular/compiler": "^20.3.0",
     "@angular/core": "^20.3.0",
     "@angular/forms": "^20.3.0",
+    "@angular/localize": "~20.3.34",
     "@angular/platform-browser": "^20.3.0",
     "@angular/router": "^20.3.0",
     "@ant-design/icons-angular": "^20.0.0",

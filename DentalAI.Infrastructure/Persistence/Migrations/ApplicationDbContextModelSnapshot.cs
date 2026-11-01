@@ -126,6 +126,11 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
+                    b.Property<int>("SlotIntervalMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(15);
+
                     b.Property<string>("TimeZone")
                         .IsRequired()
                         .HasMaxLength(100)

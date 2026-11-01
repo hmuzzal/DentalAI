@@ -20,4 +20,5 @@ public sealed record DoctorAvailabilityDto(
     IReadOnlyList<DoctorBreakDto> Breaks,
     IReadOnlyList<DoctorLeaveDto> Leaves);
 
-public sealed record AvailableSlotDto(DateTime StartTimeUtc, DateTime EndTimeUtc);
+/// <summary>A bookable slot; <c>ClinicTimeZone</c> is the IANA zone the slot should be shown in.</summary>
+public sealed record AvailableSlotDto(DateTime StartTimeUtc, DateTime EndTimeUtc, string? ClinicTimeZone = null);

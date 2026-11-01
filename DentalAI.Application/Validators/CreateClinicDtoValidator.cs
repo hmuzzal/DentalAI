@@ -13,6 +13,9 @@ public sealed class CreateClinicDtoValidator : AbstractValidator<CreateClinicDto
         RuleFor(x => x.Phone).NotEmpty().Matches(PhonePattern);
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(200);
         RuleFor(x => x.Address).NotEmpty().MaximumLength(500);
-        RuleFor(x => x.TimeZone).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.TimeZone).NotEmpty().MaximumLength(100)
+            .Must(ClinicRules.IsKnownTimeZone).WithMessage("Time zone must be a valid IANA time-zone ID, e.g. America/New_York.");
+        RuleFor(x => x.SlotIntervalMinutes).Must(ClinicRules.IsAllowedSlotInterval)
+            .WithMessage($"Slot interval must be one of: {string.Join(", ", ClinicRules.AllowedSlotIntervals)} minutes.");
     }
 }

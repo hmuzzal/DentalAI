@@ -8,4 +8,5 @@ public sealed class ClinicDto
     public string Email { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string TimeZone { get; set; } = string.Empty;
+    public int SlotIntervalMinutes { get; set; } = 15;
 }

@@ -27,6 +27,8 @@ export interface CalendarResponse {
 export interface AvailableSlot {
   startTimeUtc: string;
   endTimeUtc: string;
+  /** IANA zone of the doctor's clinic; show the slot in this zone. */
+  clinicTimeZone?: string | null;
 }
 
 export interface DoctorSchedulePeriod {

@@ -14,6 +14,7 @@ public sealed class ClinicConfiguration : IEntityTypeConfiguration<Clinic>
         builder.Property(x => x.Email).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Address).HasMaxLength(500).IsRequired();
         builder.Property(x => x.TimeZone).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.SlotIntervalMinutes).HasDefaultValue(15);
         builder.Property(x => x.CreatedDate).HasColumnType("datetime2");
         builder.Property(x => x.UpdatedDate).HasColumnType("datetime2");
 

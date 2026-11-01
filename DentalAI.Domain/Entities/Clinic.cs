@@ -9,6 +9,7 @@ public sealed class Clinic : BaseEntity
     public string Email { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string TimeZone { get; set; } = string.Empty;
+    public int SlotIntervalMinutes { get; set; } = 15;
 
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Doctor> Doctors { get; set; } = new List<Doctor>();

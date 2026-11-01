@@ -11,4 +11,5 @@ public sealed record SchedulingSnapshot(
     IReadOnlyList<ScheduleWindow> WorkingPeriods,
     IReadOnlyList<ScheduleWindow> BreakPeriods,
     bool IsOnLeave,
-    IReadOnlyList<AppointmentWindow> Appointments);
+    IReadOnlyList<AppointmentWindow> Appointments,
+    int SlotIntervalMinutes = 15);

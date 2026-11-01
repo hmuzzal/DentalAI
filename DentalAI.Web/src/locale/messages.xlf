@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file source-language="en-US" datatype="plaintext" original="ng2.template">
+    <body>
+      <trans-unit id="clinicForm.name" datatype="html">
+        <source>Name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">34,35</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.email" datatype="html">
+        <source>Email</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">41,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.phone" datatype="html">
+        <source>Phone</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">48,49</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.address" datatype="html">
+        <source>Address</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">55,56</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.timeZone" datatype="html">
+        <source>Time zone</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">62,63</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.slotInterval" datatype="html">
+        <source>Slot interval</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">79,80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="common.cancel" datatype="html">
+        <source>Cancel</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">99,100</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.editTitle" datatype="html">
+        <source>Edit clinic</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">144</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.newTitle" datatype="html">
+        <source>New clinic</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">144</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.save" datatype="html">
+        <source>Save changes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">146</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.create" datatype="html">
+        <source>Create clinic</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">146</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.updated" datatype="html">
+        <source>Clinic updated.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">195</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="clinicForm.created" datatype="html">
+        <source>Clinic created.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/clinics/clinic-form-drawer.component.ts</context>
+          <context context-type="linenumber">195</context>
+        </context-group>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

@@ -69,7 +69,7 @@ gateways, local clinic workflows).
 |---|---|---|
 | 0 | Foundation: auth, multi-tenancy, clinics, doctors, services, patients, dashboard | ✅ Done (committed) |
 | 1 | Scheduling engine | 🟡 ~80%: core built, uncommitted, gaps below |
-| 1.5 | US readiness: E.164 phones, insurance profile, i18n scaffold | ⬜ Not started |
+| 1.5 | US readiness: E.164 phones, insurance profile (i18n scaffold done in Phase 1) | ⬜ Not started |
 | 2 | Billing, invoices and payments (Stripe first) | ⬜ |
 | 3 | Email and SMS reminders (Twilio / SendGrid, background jobs) | ⬜ |
 | 4 | Reports and analytics | ⬜ (a basic dashboard exists) |
@@ -82,8 +82,8 @@ gateways, local clinic workflows).
 
 ## 7. Current status (audit, 2026-11-01)
 
-**Build:** API ✅ builds · Angular ✅ builds · Tests ✅ 4/4 pass (SchedulingEngine only).
-**Git:** a single commit (`first commmit`). All Phase 1 work is **uncommitted** in the working tree.
+**Build:** API ✅ builds · Angular ✅ builds (initial bundle 1.70 MB, over the 1.5 MB budget) · Tests ✅ 44 unit + 18 API integration pass (2026-11-01).
+**Git:** Phase 0 and most of Phase 1 committed; the DST / time-zone / slot-interval / i18n slice is uncommitted.
 
 ### Done
 - JWT auth with refresh tokens and roles (SuperAdmin, ClinicAdmin, Receptionist); tenant-scoped repositories
@@ -119,19 +119,28 @@ gateways, local clinic workflows).
    Appointment and calendar DTOs now carry `ClinicTimeZone`; the Appointments, Calendar and dashboard lists show
    each appointment in its own clinic's zone, tagged (e.g. "9:00 AM EST") when it differs from the viewer's.
    ✅ 2026-11-01: the calendar opens on (and its "Today" button returns to) the clinic's today, not the browser's.
-5. **Clinic time-zone picker.** The clinic form has no time-zone selector (it should be a
-   dropdown of IANA zones, defaulting to US zones). The validator does not check that the zone ID is real.
-6. **DST edge cases.** `ToUtc` throws on local times that don't exist during the
-   spring-forward hour, and repeated fall-back times are ambiguous. Needs handling and tests.
+5. ~~**Clinic time-zone picker.**~~ ✅ Fixed 2026-11-01: the Clinics page has an add/edit drawer with a searchable
+   time-zone dropdown (from `GET /lookups/time-zones`: 8 main US zones first, then all others by current offset)
+   and a slot-interval picker. The create/update validators reject zone IDs the server does not recognise.
+6. ~~**DST edge cases.**~~ ✅ Fixed 2026-11-01: `SchedulingEngine.ToUtc` never throws. A wall-clock time repeated
+   by fall-back means its first occurrence; one skipped by spring-forward is never offered as a slot
+   (`TryToUtcExact`), and is read with the pre-jump offset elsewhere (e.g. midnight day boundaries). An appointment
+   lasts its real duration in UTC; the working-hour and break checks use the wall-clock span `start + duration`.
+   Tested on the 2026 and 2027 New York transitions.
 7. ~~**Dashboard revenue grouped by UTC date.**~~ ✅ Fixed 2026-11-01: `DashboardCalculator` counts "today" and buckets revenue
    by day/month in each appointment's clinic zone (7 unit tests); the chart window ends on the clinic's today.
    Note: revenue now aggregates up to 12 months of completed appointments in memory; move to SQL if volumes grow.
-8. **Slot interval hard-coded at 15 minutes.** It should be a clinic setting.
-9. **Test coverage.** 4 engine unit tests, plus 11 API integration tests (2026-11-01,
-   `DentalAI.Api.IntegrationTests`): concurrent booking and rescheduling, the per-doctor lock, reschedule rules,
-   slot exclusion, cancel, clinic zone on DTOs. They boot the real API on a throwaway SQL Server database
+8. ~~**Slot interval hard-coded at 15 minutes.**~~ ✅ Fixed 2026-11-01: `Clinics.SlotIntervalMinutes` (migration
+   `AddClinicSlotInterval`, default 15; allowed 5, 10, 15, 20, 30, 60). Slots also carry `ClinicTimeZone`.
+9. **Test coverage.** 44 unit tests (engine, DST, zones, slot interval, clinic validators, time-zone catalog) and
+   18 API integration tests (`DentalAI.Api.IntegrationTests`): concurrent booking and rescheduling, the per-doctor
+   lock, reschedule rules, slot exclusion, cancel, clinic zone on DTOs, time-zone lookup and validation, and New York
+   spring-forward / fall-back days end to end. They boot the real API on a throwaway SQL Server database
    (`DENTALAI_TEST_SQLSERVER`, default "."). Disabling the lock makes the 3 concurrency tests fail, as it should.
-   Still missing: DST, multiple time zones, tenant isolation.
+   Still missing: tenant isolation.
+10. ~~**Super admins got a 500 on every tenant table.**~~ ✅ Fixed 2026-11-01 (found by the new tests): the tenant
+   query filter used `CurrentClinicId.Value`, which EF evaluates as a parameter even when the super-admin bypass
+   applies, so it threw "Nullable object must have a value" for users without a clinic.
 
 ### Technical debt / known issues (noted 2026-11-01, open until fixed)
 - [ ] **Security: vulnerable packages.** AutoMapper 13.0.1 (high, GHSA-rvv3-g6hj-g44x) and
@@ -146,7 +155,12 @@ gateways, local clinic workflows).
   integration tests now prove a fresh install works. Note: the filtered `IX_Clinics_Slug` index needs
   QUOTED_IDENTIFIER ON for writes (SqlClient default; use `sqlcmd -I`).- [x] **Build/cache folders in git.** `.dotnet-cli`, `.pnpm-store`, `.nuget`, `.buildtmp`,
   `.appdata` and `.vs` show up in git. Add them to `.gitignore` and untrack them. ✅ Done 2026-11-01.
-- [ ] No Angular unit tests and no API integration tests.
+- [ ] No Angular unit tests. (API integration tests exist since 2026-11-01.)
+- [ ] Angular initial bundle is 1.70 MB, over the 1.5 MB budget (build warning). Likely ng-zorro and the chart
+  library on first load; lazy-load or trim imports.
+- [ ] Migration `20260622093000_BackfillClinicTimeZone` has no `.Designer.cs`, so EF never runs it.
+- [ ] i18n: only the clinic form is marked up (`i18n` / `$localize`). Run `pnpm extract-i18n` to update
+  `src/locale/messages.xlf`; mark other screens as they are touched.
 
 ## 8. Phase plans
 
@@ -154,19 +168,19 @@ gateways, local clinic workflows).
 **Backend**
 - [x] Atomic booking: validate + insert under `sp_getapplock` keyed on DoctorId; 409 on conflict (2026-11-01)
 - [x] `POST /appointments/{id}/reschedule` (new start time, re-validated by the engine, excluding the appointment itself)
-- [ ] DST-safe `ToUtc`: skip non-existent local times, pick the first instance of ambiguous ones
-- [ ] Validate the clinic `TimeZone` as a real zone ID; endpoint `GET /lookups/time-zones` (US zones first)
-- [ ] Return the clinic time-zone ID with the slot, calendar and appointment DTOs
-- [ ] Clinic setting `SlotIntervalMinutes` (default 15)
+- [x] DST-safe `ToUtc`: skip non-existent local times, pick the first instance of ambiguous ones (2026-11-01)
+- [x] Validate the clinic `TimeZone` as a real zone ID; endpoint `GET /lookups/time-zones` (US zones first) (2026-11-01)
+- [x] Return the clinic time-zone ID with the slot, calendar and appointment DTOs (2026-11-01)
+- [x] Clinic setting `SlotIntervalMinutes` (default 15; 5, 10, 15, 20, 30 or 60) (2026-11-01)
 - [x] Dashboard: group revenue by clinic-local date (2026-11-01)
-- [ ] Tests: DST (America/New_York, March and November), multiple zones, overlap, leave, reschedule
+- [x] Tests: DST (America/New_York, March and November), multiple zones, overlap, leave, reschedule (2026-11-01)
 
 **Frontend**
 - [x] Booking flow: doctor → service → patient → date → `time-slot-selector` → confirm (2026-11-01)
 - [x] Reschedule and cancel actions from the calendar and appointments list (2026-11-01)
 - [x] Time-zone-aware formatting: helpers in `core/time-zone.ts` (`formatInZone`, `dateKeyInZone`)
-- [ ] Time-zone dropdown on the clinic form
-- [ ] i18n scaffold (Angular `$localize`); English as the source locale
+- [x] Time-zone dropdown on the clinic form (new add/edit clinic drawer, with slot interval) (2026-11-01)
+- [x] i18n scaffold (Angular `$localize`); English as the source locale (2026-11-01)
 
 **Housekeeping**
 - [x] `.gitignore` the generated folders, then commit Phase 0 cleanup and Phase 1 separately

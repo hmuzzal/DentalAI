@@ -15,7 +15,13 @@ public sealed class SchedulingRepository(ApplicationDbContext dbContext) : ISche
     {
         var doctor = await dbContext.Doctors.AsNoTracking()
             .Where(x => x.Id == doctorId)
-            .Select(x => new { x.Id, x.ClinicId, TimeZone = x.Clinic != null ? x.Clinic.TimeZone : "UTC" })
+            .Select(x => new
+            {
+                x.Id,
+                x.ClinicId,
+                TimeZone = x.Clinic != null ? x.Clinic.TimeZone : "UTC",
+                SlotIntervalMinutes = x.Clinic != null ? x.Clinic.SlotIntervalMinutes : SchedulingEngine.DefaultSlotIntervalMinutes
+            })
             .SingleOrDefaultAsync(cancellationToken);
         if (doctor is null) return null;
 
@@ -43,7 +49,8 @@ public sealed class SchedulingRepository(ApplicationDbContext dbContext) : ISche
             .Select(x => new AppointmentWindow(x.StartTime, x.EndTime))
             .ToListAsync(cancellationToken);
 
-        return new SchedulingSnapshot(doctor.Id, doctor.ClinicId, doctor.TimeZone, date, schedules, breaks, onLeave, appointments);
+        return new SchedulingSnapshot(doctor.Id, doctor.ClinicId, doctor.TimeZone, date, schedules, breaks, onLeave,
+            appointments, doctor.SlotIntervalMinutes);
     }
 
     public async Task<IReadOnlyList<DoctorSchedule>> GetSchedulesAsync(Guid doctorId, CancellationToken cancellationToken) =>

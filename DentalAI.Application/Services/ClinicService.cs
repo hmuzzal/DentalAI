@@ -40,7 +40,8 @@ public sealed class ClinicService(
             Phone = request.Phone.Trim(),
             Email = request.Email.Trim().ToLowerInvariant(),
             Address = request.Address.Trim(),
-            TimeZone = request.TimeZone.Trim()
+            TimeZone = request.TimeZone.Trim(),
+            SlotIntervalMinutes = request.SlotIntervalMinutes
         };
 
         await clinicRepository.AddAsync(clinic, cancellationToken);
@@ -68,6 +69,7 @@ public sealed class ClinicService(
         clinic.Email = request.Email.Trim().ToLowerInvariant();
         clinic.Address = request.Address.Trim();
         clinic.TimeZone = request.TimeZone.Trim();
+        clinic.SlotIntervalMinutes = request.SlotIntervalMinutes;
 
         clinicRepository.Update(clinic);
         await unitOfWork.SaveChangesAsync(cancellationToken);
