@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { CurrencyPipe } from '@angular/common';
+
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -24,6 +24,8 @@ import { DentalService } from '../../core/models/service.models';
 import { AppointmentsService } from '../../core/services/appointments.service';
 import { AuthStateService } from '../../core/services/auth-state.service';
 import { BookingService } from '../../core/services/booking.service';
+import { BillingSettingsService } from '../../core/services/billing-settings.service';
+import { MoneyPipe } from '../../shared/money.pipe';
 import { DoctorsService } from '../../core/services/doctors.service';
 import { PatientsService } from '../../core/services/patients.service';
 import { ServicesCatalogService } from '../../core/services/services-catalog.service';
@@ -37,7 +39,7 @@ type LoadState = 'idle' | 'loading' | 'ready' | 'error';
   selector: 'app-booking-drawer',
   standalone: true,
   imports: [
-    CurrencyPipe, FormsModule, NzAlertModule, NzButtonModule, NzDatePickerModule, NzDrawerModule, NzFormModule,
+    MoneyPipe, FormsModule, NzAlertModule, NzButtonModule, NzDatePickerModule, NzDrawerModule, NzFormModule,
     NzInputModule, NzSelectModule, NzSkeletonModule, TimeSlotSelectorComponent
   ],
   template: `
@@ -92,7 +94,7 @@ type LoadState = 'idle' | 'loading' | 'ready' | 'error';
                       }
                     </nz-select>
                     <ng-template #serviceExtra>
-                      {{ selectedService()!.durationMinutes }} minutes · {{ selectedService()!.price | currency }}
+                      {{ selectedService()!.durationMinutes }} minutes · {{ selectedService()!.price | money: billing.currency() }}
                     </ng-template>
                   </nz-form-control>
                 </nz-form-item>
@@ -195,6 +197,7 @@ export class BookingDrawerComponent {
   private readonly servicesService = inject(ServicesCatalogService);
   private readonly patientsService = inject(PatientsService);
   private readonly messages = inject(NzMessageService);
+  readonly billing = inject(BillingSettingsService);
   private readonly router = inject(Router);
 
   readonly isMobile = toSignal(

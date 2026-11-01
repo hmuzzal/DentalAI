@@ -1,4 +1,4 @@
-import { CurrencyPipe } from '@angular/common';
+
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -13,6 +13,8 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
 import { finalize } from 'rxjs';
 import { DentalService } from '../../core/models/service.models';
 import { ServicesCatalogService } from '../../core/services/services-catalog.service';
+import { BillingSettingsService } from '../../core/services/billing-settings.service';
+import { MoneyPipe } from '../../shared/money.pipe';
 import { matchesSearch } from '../../shared/forms';
 import { PageHeaderComponent } from '../../shared/page-header.component';
 import { PageStateComponent } from '../../shared/page-state.component';
@@ -25,7 +27,7 @@ type StatusFilter = 'All' | 'Active' | 'Inactive';
   selector: 'app-services-page',
   standalone: true,
   imports: [
-    CurrencyPipe, FormsModule, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule,
+    MoneyPipe, FormsModule, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule,
     NzSegmentedModule, NzTableModule, NzTagModule, PageHeaderComponent, PageStateComponent, ServiceFormDrawerComponent
   ],
   template: `
@@ -70,7 +72,7 @@ type StatusFilter = 'All' | 'Active' | 'Inactive';
                     @if (service.description) { <div class="muted">{{ service.description }}</div> }
                   </td>
                   <td nzAlign="right" class="num nowrap">{{ service.durationMinutes }} min</td>
-                  <td nzAlign="right" class="num">{{ service.price | currency: 'USD' }}</td>
+                  <td nzAlign="right" class="num">{{ service.price | money: billing.currency() }}</td>
                   <td>
                     <nz-tag [nzColor]="service.isActive ? 'green' : 'default'">
                       {{ service.isActive ? 'Active' : 'Inactive' }}
@@ -100,6 +102,7 @@ type StatusFilter = 'All' | 'Active' | 'Inactive';
 export class ServicesPageComponent {
   private readonly servicesCatalog = inject(ServicesCatalogService);
   private readonly messages = inject(NzMessageService);
+  readonly billing = inject(BillingSettingsService);
 
   readonly services = remoteData<DentalService[]>(() => this.servicesCatalog.getAll(), []);
   readonly statusOptions: StatusFilter[] = ['All', 'Active', 'Inactive'];

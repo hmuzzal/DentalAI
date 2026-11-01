@@ -10,4 +10,11 @@ public interface IUnitOfWork
     /// same doctor. Do the availability check and the save inside <paramref name="work"/>.
     /// </summary>
     Task<T> RunWithDoctorScheduleLockAsync<T>(Guid doctorId, Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> in a transaction holding an exclusive lock named <paramref name="resource"/>
+    /// (e.g. "invoice:{id}"). Load what you change inside <paramref name="work"/>, so you see committed data.
+    /// Can be nested: the inner call joins the outer transaction.
+    /// </summary>
+    Task<T> RunWithLockAsync<T>(string resource, Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken);
 }

@@ -61,6 +61,13 @@ export const routes: Routes = [
       // The calendar is now a view of the Appointments page; keep old links working.
       { path: 'calendar', redirectTo: 'appointments' },
       {
+        path: 'settings/billing',
+        title: 'Billing settings',
+        canActivate: [roleGuard],
+        data: { roles: ['ClinicAdmin'] },
+        loadComponent: () => import('./features/settings/billing-settings-page.component').then((m) => m.BillingSettingsPageComponent)
+      },
+      {
         path: 'staff',
         title: 'Staff',
         // A clinic's admins manage its staff; receptionists can't, and platform admins use Clinics > Staff.

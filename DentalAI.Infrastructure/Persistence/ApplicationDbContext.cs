@@ -20,6 +20,11 @@ public sealed class ApplicationDbContext(
     public DbSet<DentalAI.Domain.Entities.Service> Services => Set<DentalAI.Domain.Entities.Service>();
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<PatientInsurance> PatientInsurances => Set<PatientInsurance>();
+    public DbSet<ClinicBillingSettings> ClinicBillingSettings => Set<ClinicBillingSettings>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Refund> Refunds => Set<Refund>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<DoctorSchedule> DoctorSchedules => Set<DoctorSchedule>();
     public DbSet<DoctorBreak> DoctorBreaks => Set<DoctorBreak>();
@@ -84,31 +89,53 @@ public sealed class ApplicationDbContext(
             throw new InvalidOperationException("The doctor schedule lock must not be nested inside another transaction.");
         }
 
-        await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
-
-        // Transaction-owned app lock: released automatically on commit, rollback or connection loss.
         // Every booking write for this doctor takes the same lock, so availability checks see committed data.
-        var lockResult = new Microsoft.Data.SqlClient.SqlParameter("@result", System.Data.SqlDbType.Int)
-        {
-            Direction = System.Data.ParameterDirection.Output
-        };
-        var resource = new Microsoft.Data.SqlClient.SqlParameter("@resource", System.Data.SqlDbType.NVarChar, 255)
-        {
-            Value = $"dentalai:doctor-schedule:{doctorId:N}"
-        };
-        await Database.ExecuteSqlRawAsync(
-            "EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;",
-            [resource, lockResult],
-            cancellationToken);
+        return await RunWithLockAsync($"doctor-schedule:{doctorId:N}", work, cancellationToken,
+            "The doctor's schedule is busy. Please try again.");
+    }
 
-        if (lockResult.Value is not int code || code < 0)
+    public Task<T> RunWithLockAsync<T>(string resource, Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken) =>
+        RunWithLockAsync(resource, work, cancellationToken, "This record is busy. Please try again.");
+
+    /// <summary>
+    /// Runs <paramref name="work"/> holding an exclusive, transaction-owned app lock (released on commit, rollback or
+    /// connection loss). Starts a transaction, or joins the current one when nested (the outer one commits).
+    /// </summary>
+    private async Task<T> RunWithLockAsync<T>(
+        string resource, Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken, string busyMessage)
+    {
+        var ownTransaction = Database.CurrentTransaction is null
+            ? await Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        try
         {
-            throw new TimeoutException("The doctor's schedule is busy. Please try again.");
+            var lockResult = new Microsoft.Data.SqlClient.SqlParameter("@result", System.Data.SqlDbType.Int)
+            {
+                Direction = System.Data.ParameterDirection.Output
+            };
+            var resourceName = new Microsoft.Data.SqlClient.SqlParameter("@resource", System.Data.SqlDbType.NVarChar, 255)
+            {
+                Value = $"dentalai:{resource}"
+            };
+            await Database.ExecuteSqlRawAsync(
+                "EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;",
+                [resourceName, lockResult],
+                cancellationToken);
+
+            if (lockResult.Value is not int code || code < 0)
+            {
+                throw new TimeoutException(busyMessage);
+            }
+
+            var result = await work(cancellationToken);
+            if (ownTransaction is not null) await ownTransaction.CommitAsync(cancellationToken);
+            return result;
         }
-
-        var result = await work(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return result;
+        finally
+        {
+            if (ownTransaction is not null) await ownTransaction.DisposeAsync();
+        }
     }
 
     private void ApplyAuditInformation()

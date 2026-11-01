@@ -80,7 +80,7 @@ appointments, doctors, services or schedules:
 | 0 | Foundation: auth, multi-tenancy, clinics, doctors, services, patients, dashboard | ✅ Done (committed) |
 | 1 | Scheduling engine | 🟡 ~80%: core built, uncommitted, gaps below |
 | 1.5 | US readiness: E.164 phones, clinic country, patient address and SMS consent, insurance | ✅ Done 2026-11-01 |
-| 2 | Billing, invoices and payments (Stripe first) | ⬜ |
+| 2 | Billing, invoices and payments (provider-independent core; online payments via the clinic's own Stripe) | 🟡 2a done 2026-11-02 (billing core API, currency setting); 2b UI and 2c online payments next |
 | 3 | Email and SMS reminders (Twilio / SendGrid, background jobs) | ⬜ |
 | 4 | Reports and analytics | ⬜ (a basic dashboard exists) |
 | 5 | Patient portal (self-booking) | ⬜ |
@@ -260,10 +260,59 @@ appointments, doctors, services or schedules:
   tabs with problems get a red dot and Save jumps to the first one (2026-11-01)
 - Migration `AddUsReadiness`. Checked in the browser on a throwaway database (clinic admin and super admin).
 
-### Phase 2: billing, invoices and payments
-- `Invoice`, `InvoiceLine`, `Payment`; generate an invoice from a completed appointment
-- Insurance estimate vs. patient responsibility
-- `IPaymentGateway` with Stripe first; PDF invoice
+### Phase 2: billing, invoices and payments (planned 2026-11-02)
+
+**Constraint: Stripe doesn't accept Bangladesh-registered businesses.** So billing doesn't depend on any payment
+provider, and online card payments go to each **clinic's own** Stripe account (the clinic is the merchant; DentalAI
+never holds patients' money). DentalAI's own subscription billing (clinics paying us) needs a company in a
+Stripe-supported country (e.g. a US company via Stripe Atlas) or a merchant of record such as Paddle: a business
+decision, outside Phase 2. Bangladesh Bank allows setting up a company abroad with up to USD 10,000; check tax and
+repatriation with a Bangladeshi accountant first.
+
+**2a. Billing core (API), no provider** ✅ Done 2026-11-02 (migration `AddBilling`; 24 unit + 12 API tests)
+- `Invoice`: clinic, patient, optional appointment, number per clinic (`INV-000123`, allocated atomically), status
+  (Draft → Issued → PartiallyPaid → Paid, or Void), issue and due dates, currency (clinic setting, USD), subtotal,
+  discount, total, **insurance estimate**, **patient responsibility**, amount paid, balance, notes.
+- `InvoiceLine`: service (optional), description, optional CDT code and tooth number, quantity, unit price, line total,
+  insurance estimate per line.
+- `Payment`: invoice, amount, method (cash, card terminal, check, insurance, online), reference (check number, card last
+  4, Stripe ID), received date, recorded by. Refunds as `Refund` records linked to a payment, not edits.
+- Rules: drafts are editable; issued invoices change only by payment, refund or void (void needs a reason). Payments
+  can't exceed the balance. Status and balance are derived from lines and payments in one place. Invoice and payment
+  writes run under a per-invoice lock, so concurrent payments can't overpay.
+- **Create from a completed appointment**: one line from the service and its price. Lines can be added (multiple
+  procedures in a visit).
+- Insurance estimate: entered per line, or a coverage % from the patient's primary plan applied to the lines.
+  Claims (837D/EDI) are later, not Phase 2.
+- Clinic billing settings: currency, invoice prefix, payment terms (days), default tax rate (0: US dental services are
+  generally not taxed).
+- Permissions: receptionists create, issue and record payments; refunds and voids are clinic admins only.
+- Dashboard revenue switches from "completed appointments × service price" to **payments received**.
+- Tests: numbering under concurrency, overpayment and concurrent payments, status transitions, refunds, totals, tenant isolation.
+
+- Built as planned, plus: **currency is a clinic setting** (ISO 4217, default from the clinic's country: US → USD,
+  BD → BDT; amounts rounded to the currency's decimals, e.g. 0 for JPY, 3 for KWD). Each invoice keeps its own
+  currency. **Tooth numbering** (Universal for US clinics, FDI elsewhere) is a setting too. Invoice numbers are given on
+  issue (drafts have none). Lock timeouts now return 409 instead of 500.
+- Endpoints: `/invoices` (list with outstanding totals per currency, get, create, `from-appointment/{id}`, update and
+  delete drafts, `issue`, `payments`, `payments/{id}/refunds`, `void`), `/billing/settings`, `/billing/currencies`.
+- UI already done: **Billing settings** page for clinic admins (`/settings/billing`); prices on Services, the booking
+  drawer and the dashboard use the clinic's currency; dashboard revenue reads "Payments received".
+- CDT codes are the ADA's copyright: clinics can type codes, but DentalAI must not ship the code list without a licence.
+
+**2b. Billing UI**
+- Billing nav group: **Invoices** (filter by status, patient and dates; totals outstanding), **invoice detail** (lines,
+  payments, record payment, refund, void), "Create invoice" from a completed appointment and from a patient, patient
+  balance on the patient record.
+- **Printable invoice** (print stylesheet → browser "Save as PDF"). Server-side PDF (QuestPDF) later if needed.
+
+**2c. Online payments (needs a Stripe account to develop and test)**
+- `IPaymentGateway` (create a payment link or checkout session, verify a webhook, refund). `StripeGateway` uses the
+  **clinic's own** restricted API key and webhook secret, stored encrypted (ASP.NET Data Protection) in clinic billing
+  settings; cards are entered only on Stripe's hosted Checkout (no card data touches DentalAI).
+- "Send payment link" on an invoice; the webhook records the payment idempotently (by Stripe event ID).
+- Later, with a company in a supported country: Stripe Connect (clinics onboard through Stripe), Stripe Terminal for
+  in-clinic cards, and DentalAI's own subscription billing.
 
 ### Phase 3: email and SMS reminders
 - Background job runner (Hangfire or a hosted service); `ISmsSender` (Twilio), `IEmailSender` (SendGrid)

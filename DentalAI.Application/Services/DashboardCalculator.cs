@@ -28,7 +28,8 @@ public static class DashboardCalculator
 
     public static SchedulingDashboardDto Build(
         IReadOnlyList<DashboardAppointmentRow> todayWindowRows,
-        IReadOnlyList<DashboardAppointmentRow> completedRows,
+        // Money received: one row per payment (positive) or refund (negative), at the time it happened.
+        IReadOnlyList<DashboardAppointmentRow> revenueRows,
         int upcomingAppointments,
         DateTime utcNow)
     {
@@ -36,7 +37,7 @@ public static class DashboardCalculator
 
         var byDay = new SortedDictionary<string, decimal>(StringComparer.Ordinal);
         var byMonth = new SortedDictionary<string, decimal>(StringComparer.Ordinal);
-        foreach (var row in completedRows.Where(row => row.Status == AppointmentStatus.Completed))
+        foreach (var row in revenueRows.Where(row => row.Status == AppointmentStatus.Completed))
         {
             var (localDate, localToday) = LocalDates(row, utcNow);
             if (localDate > localToday) continue;

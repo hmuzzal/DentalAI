@@ -12,6 +12,7 @@ public sealed class DashboardService(
     IPatientRepository patientRepository,
     IServiceRepository serviceRepository,
     ISchedulingRepository schedulingRepository,
+    IBillingRepository billingRepository,
     IDateTimeProvider dateTimeProvider) : IDashboardService
 {
     public async Task<Result<DashboardStatsDto>> GetStatsAsync(CancellationToken cancellationToken)
@@ -41,10 +42,11 @@ public sealed class DashboardService(
         var utcNow = dateTimeProvider.UtcNow;
         var todayRows = await GetTodayWindowRowsAsync(utcNow, cancellationToken);
         var (revenueFrom, revenueTo) = DashboardCalculator.RevenueWindowUtc(utcNow);
-        var completedRows = await schedulingRepository.GetDashboardRowsAsync(revenueFrom, revenueTo, completedOnly: true, cancellationToken);
+        // Revenue is money actually received: payments, minus refunds on the day they were refunded.
+        var revenueRows = await billingRepository.GetRevenueRowsAsync(revenueFrom, revenueTo, cancellationToken);
         var upcoming = await appointmentRepository.CountUpcomingAsync(utcNow, cancellationToken);
 
-        return Result<SchedulingDashboardDto>.Ok(DashboardCalculator.Build(todayRows, completedRows, upcoming, utcNow));
+        return Result<SchedulingDashboardDto>.Ok(DashboardCalculator.Build(todayRows, revenueRows, upcoming, utcNow));
     }
 
     private Task<IReadOnlyList<DashboardAppointmentRow>> GetTodayWindowRowsAsync(DateTime utcNow, CancellationToken cancellationToken)

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { formatMoney } from '../../shared/money.pipe';
 
 export interface RevenueBar {
   /** "yyyy-MM-dd" */
@@ -6,13 +7,6 @@ export interface RevenueBar {
   /** Short axis/tooltip label, e.g. "Oct 5". */
   label: string;
   value: number;
-}
-
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const usdCompact = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
-
-export function formatUsd(value: number): string {
-  return usd.format(value);
 }
 
 /** Round a step up to 1, 2, 2.5 or 5 × 10^n so axis ticks are clean numbers. */
@@ -107,6 +101,8 @@ const TICK_COUNT = 4;
 })
 export class RevenueChartComponent {
   readonly bars = input.required<RevenueBar[]>();
+  /** ISO 4217 code of the clinic's currency. */
+  readonly currency = input('USD');
   readonly active = signal<number | null>(null);
 
   private readonly step = computed(() => niceStep(Math.max(0, ...this.bars().map((b) => b.value)) / TICK_COUNT));
@@ -131,7 +127,7 @@ export class RevenueChartComponent {
   readonly ariaLabel = computed(() => {
     const bars = this.bars();
     const total = bars.reduce((sum, bar) => sum + bar.value, 0);
-    return `Daily revenue, ${bars[0]?.label ?? ''} to ${bars.at(-1)?.label ?? ''}. Total ${formatUsd(total)}. Use the table view for every value.`;
+    return `Daily revenue, ${bars[0]?.label ?? ''} to ${bars.at(-1)?.label ?? ''}. Total ${this.money(total)}. Use the table view for every value.`;
   });
 
   pct(value: number): number {
@@ -139,15 +135,15 @@ export class RevenueChartComponent {
   }
 
   money(value: number): string {
-    return formatUsd(value);
+    return formatMoney(value, this.currency(), { wholeUnits: true });
   }
 
   compact(value: number): string {
-    return value >= 10_000 ? usdCompact.format(value) : formatUsd(value);
+    return value >= 10_000 ? formatMoney(value, this.currency(), { compact: true }) : this.money(value);
   }
 
   tickLabel(value: number): string {
     // One style per axis: compact once the axis reaches 10K.
-    return this.max() >= 10_000 ? usdCompact.format(value) : formatUsd(value);
+    return this.max() >= 10_000 ? formatMoney(value, this.currency(), { compact: true }) : this.money(value);
   }
 }

@@ -20,7 +20,9 @@ import { dateKeyInZone, effectiveTimeZone, formatAppointmentTime, formatInZone }
 import { PageHeaderComponent } from '../../shared/page-header.component';
 import { PageStateComponent } from '../../shared/page-state.component';
 import { remoteData } from '../../shared/remote-data';
-import { formatUsd, RevenueBar, RevenueChartComponent } from './revenue-chart.component';
+import { RevenueBar, RevenueChartComponent } from './revenue-chart.component';
+import { formatMoney } from '../../shared/money.pipe';
+import { BillingSettingsService } from '../../core/services/billing-settings.service';
 
 interface DashboardData {
   stats: DashboardStats;
@@ -67,7 +69,7 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
           <ng-template #revenueTitle>
             <div class="card-title">
               <span>Revenue</span>
-              <small>Completed appointments, last {{ revenueDays }} days</small>
+              <small>Payments received, last {{ revenueDays }} days</small>
             </div>
           </ng-template>
           <ng-template #revenueToggle>
@@ -82,7 +84,7 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
             </div>
 
             @if (revenueView() === 'Chart') {
-              <app-revenue-chart [bars]="revenueBars()" />
+              <app-revenue-chart [bars]="revenueBars()" [currency]="billing.currency()" />
             } @else {
               <nz-table [nzData]="revenueRows()" nzSize="small" [nzPageSize]="10" [nzShowPagination]="true">
                 <thead><tr><th>Date</th><th nzAlign="right">Revenue</th></tr></thead>
@@ -175,6 +177,7 @@ export class DashboardPageComponent {
   private readonly dashboardService = inject(DashboardService);
   private readonly appointmentsService = inject(AppointmentsService);
   private readonly authState = inject(AuthStateService);
+  readonly billing = inject(BillingSettingsService);
   readonly booking = inject(BookingService);
 
   readonly status = APPOINTMENT_STATUS;
@@ -249,9 +252,10 @@ export class DashboardPageComponent {
   });
 
   readonly revenueRows = computed(() => [...this.revenueBars()].reverse());
-  readonly revenueTotal = computed(() => formatUsd(this.revenueBars().reduce((sum, bar) => sum + bar.value, 0)));
+  readonly revenueTotal = computed(() =>
+    formatMoney(this.revenueBars().reduce((sum, bar) => sum + bar.value, 0), this.billing.currency(), { wholeUnits: true }));
 
   money(value: number): string {
-    return formatUsd(value);
+    return formatMoney(value, this.billing.currency(), { wholeUnits: true });
   }
 }

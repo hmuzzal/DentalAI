@@ -9,6 +9,7 @@ import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { finalize } from 'rxjs';
 import { DentalService, ServiceRequest } from '../../core/models/service.models';
 import { ServicesCatalogService } from '../../core/services/services-catalog.service';
+import { BillingSettingsService } from '../../core/services/billing-settings.service';
 import { FormDrawerComponent } from '../../shared/form-drawer.component';
 import { optional, saveErrorText, touchAll } from '../../shared/forms';
 
@@ -43,10 +44,10 @@ import { optional, saveErrorText, touchAll } from '../../shared/forms';
             </nz-form-control>
           </nz-form-item>
           <nz-form-item>
-            <nz-form-label nzRequired nzFor="service-price">Price (USD)</nz-form-label>
+            <nz-form-label nzRequired nzFor="service-price">Price ({{ billing.currency() }})</nz-form-label>
             <nz-form-control nzErrorTip="Enter 0 or more.">
-              <nz-input-number nzId="service-price" formControlName="price" [nzMin]="0" [nzStep]="5" [nzPrecision]="2"
-                               nzPrefix="$" class="full" />
+              <nz-input-number nzId="service-price" formControlName="price" [nzMin]="0" [nzStep]="5" [nzPrecision]="billing.settings()?.currencyDecimals ?? 2"
+                               class="full" />
             </nz-form-control>
           </nz-form-item>
         </div>
@@ -83,6 +84,7 @@ export class ServiceFormDrawerComponent {
 
   private readonly servicesCatalog = inject(ServicesCatalogService);
   private readonly messages = inject(NzMessageService);
+  readonly billing = inject(BillingSettingsService);
 
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
