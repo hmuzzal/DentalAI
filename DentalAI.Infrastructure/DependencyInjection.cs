@@ -1,6 +1,8 @@
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Infrastructure.Configuration;
+using DentalAI.Application.Common.Notifications;
+using DentalAI.Infrastructure.Notifications;
 using DentalAI.Infrastructure.Persistence;
 using DentalAI.Infrastructure.Persistence.Repositories;
 using DentalAI.Infrastructure.Security;
@@ -34,6 +36,9 @@ public static class DependencyInjection
         services.AddScoped<IPlatformRepository, PlatformRepository>();
         services.AddScoped<IBillingRepository, BillingRepository>();
 
+        services.AddScoped<INotificationRepository, NotificationRepository>();
+        AddNotificationProviders(services, configuration);
+
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
@@ -41,5 +46,24 @@ public static class DependencyInjection
         services.AddScoped<ApplicationDbContextSeeder>();
 
         return services;
+    }
+
+    /// <summary>Email: "Log" (default) or "Smtp". SMS: "Log" (default) or "Twilio". See NotificationOptions.</summary>
+    private static void AddNotificationProviders(IServiceCollection services, IConfiguration configuration)
+    {
+        var section = configuration.GetSection(NotificationOptions.SectionName);
+        services.Configure<NotificationOptions>(section);
+        var options = section.Get<NotificationOptions>() ?? new NotificationOptions();
+        services.AddSingleton<IAppLinks, AppLinks>();
+
+        if (string.Equals(options.Email.Provider, "Smtp", StringComparison.OrdinalIgnoreCase))
+            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        else
+            services.AddSingleton<IEmailSender, LogEmailSender>();
+
+        if (string.Equals(options.Sms.Provider, "Twilio", StringComparison.OrdinalIgnoreCase))
+            services.AddHttpClient<ISmsSender, TwilioSmsSender>(client => client.Timeout = TimeSpan.FromSeconds(20));
+        else
+            services.AddSingleton<ISmsSender, LogSmsSender>();
     }
 }

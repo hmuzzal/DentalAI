@@ -19,6 +19,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly string _databaseName = $"DentalAI_IntegrationTests_{Guid.NewGuid():N}";
 
+    /// <summary>A fake Twilio auth token and public webhook URL, so tests can sign webhook requests.</summary>
+    public const string TwilioTestAuthToken = "test-twilio-auth-token";
+    public const string TwilioWebhookUrl = "https://api.test.local/api/webhooks/twilio/sms";
+
     private static string Server => Environment.GetEnvironmentVariable("DENTALAI_TEST_SQLSERVER") ?? ".";
 
     private string ConnectionString(string database) =>
@@ -28,6 +32,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:DefaultConnection", ConnectionString(_databaseName));
+        // The tests run the reminder and sending jobs themselves, at chosen times.
+        builder.UseSetting("Notifications:BackgroundJobsEnabled", "false");
+        builder.UseSetting("Notifications:Sms:Twilio:AuthToken", TwilioTestAuthToken);
+        builder.UseSetting("Notifications:Sms:Twilio:InboundWebhookUrl", TwilioWebhookUrl);
     }
 
     public Task InitializeAsync()

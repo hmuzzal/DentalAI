@@ -90,6 +90,21 @@ export const routes: Routes = [
         loadComponent: () => import('./features/settings/billing-settings-page.component').then((m) => m.BillingSettingsPageComponent)
       },
       {
+        path: 'settings/notifications',
+        title: 'Reminders & messages',
+        canActivate: [roleGuard],
+        data: { roles: ['ClinicAdmin'] },
+        loadComponent: () =>
+          import('./features/settings/notification-settings-page.component').then((m) => m.NotificationSettingsPageComponent)
+      },
+      {
+        path: 'messages',
+        title: 'Messages',
+        canActivate: [roleGuard],
+        data: { roles: CLINIC_STAFF },
+        loadComponent: () => import('./features/messages/messages-page.component').then((m) => m.MessagesPageComponent)
+      },
+      {
         path: 'staff',
         title: 'Staff',
         // A clinic's admins manage its staff; receptionists can't, and platform admins use Clinics > Staff.

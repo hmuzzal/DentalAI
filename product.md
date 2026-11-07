@@ -80,8 +80,8 @@ appointments, doctors, services or schedules:
 | 0 | Foundation: auth, multi-tenancy, clinics, doctors, services, patients, dashboard | ✅ Done (committed) |
 | 1 | Scheduling engine | 🟡 ~80%: core built, uncommitted, gaps below |
 | 1.5 | US readiness: E.164 phones, clinic country, patient address and SMS consent, insurance | ✅ Done 2026-11-01 |
-| 2 | Billing, invoices and payments (provider-independent core; online payments via the clinic's own Stripe) | 🟡 2a done 2026-11-02 (billing core API, currency setting); 2b UI and 2c online payments next |
-| 3 | Email and SMS reminders (Twilio / SendGrid, background jobs) | ⬜ |
+| 2 | Billing, invoices and payments (provider-independent core; online payments via the clinic's own Stripe) | 🟡 2a and 2b done 2026-11-02; 2c online payments deferred (needs a Stripe account) |
+| 3 | Email and SMS reminders (SMTP / Twilio, outbox and background worker) | ✅ Done 2026-11-05 (delivery needs provider credentials) |
 | 4 | Reports and analytics | ⬜ (a basic dashboard exists) |
 | 5 | Patient portal (self-booking) | ⬜ |
 | 6 | AI receptionist: chat (Claude, tool use against the scheduling API) | ⬜ |
@@ -183,7 +183,7 @@ appointments, doctors, services or schedules:
   - Deactivating or changing a role ends that person's refresh token. Invited users can't sign in until they accept.
   - Deleting a clinic deactivates its staff, ends their sessions and voids pending invites; sign-in, token refresh and
     `/auth/me` also refuse staff of a deleted clinic.
-- [ ] **Invite emails** (Phase 3): send the invite link by email instead of the admin copying it. Same for "Forgot password",
+- [x] **Invite emails** ✅ 2026-11-05 (Phase 3): invites and new links are emailed; the logged copy drops the link once sent. Still open: "Forgot password",
   which can reuse the invite-token mechanism.
 - [ ] Access tokens stay valid until they expire (60 minutes) after someone is deactivated or their clinic is deleted.
   The next page load ends the session (`/auth/me` returns 401), but API calls with the old token work until expiry.
@@ -322,10 +322,37 @@ repatriation with a Bangladeshi accountant first.
 - Later, with a company in a supported country: Stripe Connect (clinics onboard through Stripe), Stripe Terminal for
   in-clinic cards, and DentalAI's own subscription billing.
 
-### Phase 3: email and SMS reminders
-- Background job runner (Hangfire or a hosted service); `ISmsSender` (Twilio), `IEmailSender` (SendGrid)
-- Rules: confirmation on booking, reminders 24 h and 2 h before; reply C to confirm / STOP to opt out
-- Message log; quiet hours in the clinic's time zone
+### Phase 3: email and SMS reminders ✅ Done 2026-11-05
+- **Outbox.** Every email and text is a row in `OutboundMessages`, which is also the message log. Booking, rescheduling,
+  cancelling and staff invites add rows; a `NotificationWorker` (hosted service in the API) sends due rows every 10 s and
+  queues reminders every minute. Sending holds an app lock (`notification-dispatch`), so two servers never send the same
+  message. Retries after 1, 5, 15 and 60 minutes, then Failed. Turn the worker off with
+  `Notifications:BackgroundJobsEnabled=false`.
+- **Rules.** Booking confirmation; reminders at 24 h and 2 h before (clinic setting, 1–72 h, second can be off). Only the
+  latest due reminder is sent, never one that was already past when the visit was booked, never twice. A reschedule or
+  cancellation withdraws pending messages and sends a notice. Texts only to patients with SMS consent and an E.164 phone,
+  otherwise email; nothing if neither. Texts wait for the end of quiet hours (default 9 PM–8 AM, clinic time zone); a
+  reminder that would arrive after the visit is Skipped.
+- **Replies** (`POST /api/webhooks/twilio/sms`, Twilio signature required, 403 otherwise): STOP and the other carrier
+  keywords withdraw SMS consent for every patient with that number; START gives it back; C / YES confirms the
+  appointment from the latest appointment text (last 3 days).
+- **Providers.** `Notifications:Email:Provider` = `Log` (default) or `Smtp` (MailKit: works with SendGrid, Postmark, SES,
+  Microsoft 365). `Notifications:Sms:Provider` = `Log` or `Twilio` (REST; Messaging Service SID or From number). Keep
+  passwords and the Twilio auth token in user-secrets or environment variables. Set `Notifications:WebBaseUrl` for invite
+  links and `Sms:Twilio:InboundWebhookUrl` to the public webhook URL (the signature is computed over it).
+- **UI.** **Reminders** page for clinic admins (`/settings/notifications`): channels, booking notices, reminder hours,
+  quiet hours, "not connected yet" notice while a provider is `Log`, send a test. **Messages** page for staff
+  (`/messages`, `?patient=` / `?appointment=`): status, recipient, full text.
+- **Before real texts in the US:** register the brand and campaign for **A2P 10DLC** in Twilio (or use a toll-free
+  number with toll-free verification). A non-US business can register with its own country's tax ID; vetting takes
+  days to weeks. Unregistered 10DLC traffic is blocked by US carriers.
+- Open: "Forgot password" email; phones saved before 2026-11-01 that aren't E.164 get email instead of texts until the
+  record is saved again (or a backfill); bounce / delivery-status webhooks (`StatusCallback`) not handled yet; email
+  replies go nowhere (no-reply sender).
+
+**Error responses (2026-11-05).** Unexpected errors return 500 with "Something went wrong on our side… reference
+{trace id}" and log the exception under that ID; the exception text is only included in Development. Lock timeouts
+stay 409; requests the client aborted get no response.
 
 ### Phases 4–10
 Scoped in detail when each phase starts. Key dependencies:

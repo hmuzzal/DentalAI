@@ -36,6 +36,20 @@ public static class PhoneNumberRules
         }
     }
 
+    /// <summary>For messages: US/Canada numbers as (212) 555-0142, others in international format; unparseable as is.</summary>
+    public static string Display(string phone)
+    {
+        try
+        {
+            var number = Util.Parse(phone, DefaultRegion);
+            return Util.Format(number, number.CountryCode == 1 ? PhoneNumberFormat.NATIONAL : PhoneNumberFormat.INTERNATIONAL);
+        }
+        catch (NumberParseException)
+        {
+            return phone;
+        }
+    }
+
     /// <summary>The message shown when a number can't be read.</summary>
     public static string InvalidMessage(string? region) =>
         (IsSupportedRegion(region) ? region!.ToUpperInvariant() : DefaultRegion) == "US"

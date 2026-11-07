@@ -25,6 +25,8 @@ public sealed class ApplicationDbContext(
     public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Refund> Refunds => Set<Refund>();
+    public DbSet<ClinicNotificationSettings> ClinicNotificationSettings => Set<ClinicNotificationSettings>();
+    public DbSet<OutboundMessage> OutboundMessages => Set<OutboundMessage>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<DoctorSchedule> DoctorSchedules => Set<DoctorSchedule>();
     public DbSet<DoctorBreak> DoctorBreaks => Set<DoctorBreak>();

@@ -24,6 +24,10 @@ public static class DependencyInjection
         services.AddScoped<ICalendarService, CalendarService>();
         services.AddScoped<StaffService>();
         services.AddScoped<BillingService>();
+        services.AddScoped<NotificationService>();
+        services.AddScoped<ReminderScheduler>();
+        services.AddScoped<MessageDispatcher>();
+        services.AddScoped<InboundSmsHandler>();
         services.AddSingleton<SchedulingEngine>();
 
         return services;

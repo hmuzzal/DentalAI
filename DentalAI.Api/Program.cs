@@ -33,6 +33,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+if (builder.Configuration.GetValue("Notifications:BackgroundJobsEnabled", true))
+{
+    // Reminders and sending. Off in integration tests, which run the jobs directly.
+    builder.Services.AddHostedService<DentalAI.Api.Infrastructure.NotificationWorker>();
+}
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 

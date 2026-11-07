@@ -5,6 +5,7 @@ using DentalAI.Application.Common.Models;
 using DentalAI.Application.DTOs.Appointments;
 using DentalAI.Application.Interfaces;
 using DentalAI.Domain.Entities;
+using MessageKind = DentalAI.Domain.Entities.MessageKind;
 using DentalAI.Domain.Enums;
 
 namespace DentalAI.Application.Services;
@@ -18,6 +19,7 @@ public sealed class AppointmentService(
     ICurrentUserService currentUserService,
     IUnitOfWork unitOfWork,
     IDateTimeProvider dateTimeProvider,
+    NotificationService notifications,
     IMapper mapper) : IAppointmentService
 {
     public async Task<Result<IReadOnlyList<AppointmentDto>>> ListAsync(CancellationToken cancellationToken)
@@ -63,7 +65,7 @@ public sealed class AppointmentService(
         var endTime = request.StartTime.AddMinutes(service.DurationMinutes);
 
         // Check-then-insert under the doctor's schedule lock, so concurrent requests can't both take the slot.
-        return await unitOfWork.RunWithDoctorScheduleLockAsync(doctor.Id, async ct =>
+        var created = await unitOfWork.RunWithDoctorScheduleLockAsync(doctor.Id, async ct =>
         {
             var schedulingValidation = await schedulingService.ValidateAppointmentAsync(doctor.Id, request.StartTime, endTime, ct);
             if (!schedulingValidation.Success)
@@ -88,6 +90,10 @@ public sealed class AppointmentService(
 
             return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment created successfully.");
         }, cancellationToken);
+
+        // After the booking is committed (and outside the lock): a notification problem can't undo it.
+        if (created.Success) await notifications.QueueAppointmentAsync(created.Data!.Id, MessageKind.BookingConfirmation, cancellationToken);
+        return created;
     }
 
     /// <summary>
@@ -116,7 +122,7 @@ public sealed class AppointmentService(
             ?? (int)(appointment.EndTime - appointment.StartTime).TotalMinutes;
         var endTime = request.StartTime.AddMinutes(durationMinutes);
 
-        return await unitOfWork.RunWithDoctorScheduleLockAsync(appointment.DoctorId, async ct =>
+        var moved = await unitOfWork.RunWithDoctorScheduleLockAsync(appointment.DoctorId, async ct =>
         {
             // Ignore the appointment itself, or it would block its own neighbouring slots.
             var schedulingValidation = await schedulingService.ValidateAppointmentAsync(
@@ -134,6 +140,9 @@ public sealed class AppointmentService(
             await unitOfWork.SaveChangesAsync(ct);
             return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment rescheduled successfully.");
         }, cancellationToken);
+
+        if (moved.Success) await notifications.QueueAppointmentAsync(appointment.Id, MessageKind.Rescheduled, cancellationToken);
+        return moved;
     }
 
     public Task<Result<AppointmentDto>> ConfirmAsync(Guid id, UpdateAppointmentStatusRequest request, CancellationToken cancellationToken) =>
@@ -174,6 +183,9 @@ public sealed class AppointmentService(
 
         appointmentRepository.Update(appointment);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (newStatus == AppointmentStatus.Cancelled)
+            await notifications.QueueAppointmentAsync(appointment.Id, MessageKind.Cancelled, cancellationToken);
 
         return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment status updated successfully.");
     }

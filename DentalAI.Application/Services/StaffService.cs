@@ -26,6 +26,7 @@ public sealed class StaffService(
     IClinicRepository clinicRepository,
     ICurrentUserService currentUserService,
     IDateTimeProvider dateTimeProvider,
+    NotificationService notifications,
     IUnitOfWork unitOfWork)
 {
     public async Task<Result<IReadOnlyList<StaffMemberDto>>> ListAsync(Guid clinicId, CancellationToken cancellationToken)
@@ -44,7 +45,8 @@ public sealed class StaffService(
             return Result<StaffInviteDto>.Fail(ResultStatus.Forbidden,
                 "Platform admins invite a clinic's admins; the clinic's admins invite the rest of their staff.");
 
-        if (await clinicRepository.GetByIdAsync(clinicId, cancellationToken) is null)
+        var clinic = await clinicRepository.GetByIdAsync(clinicId, cancellationToken);
+        if (clinic is null)
             return Result<StaffInviteDto>.Fail(ResultStatus.NotFound, "Clinic was not found.");
 
         var email = request.Email.Trim().ToLowerInvariant();
@@ -67,9 +69,10 @@ public sealed class StaffService(
 
         await userRepository.AddAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await notifications.QueueStaffInviteAsync(user, clinic.Name, token, user.InviteExpiresAtUtc.Value, clinic.TimeZone, cancellationToken);
 
         return Result<StaffInviteDto>.Ok(new StaffInviteDto(ToDto(user), token, user.InviteExpiresAtUtc.Value),
-            $"{user.FirstName} has been invited. Send them the link to set their password.");
+            $"{user.FirstName} has been invited. We've emailed them the link; you can also copy it below.");
     }
 
     /// <summary>A new link for someone who hasn't set a password yet. The previous link stops working.</summary>
@@ -87,6 +90,8 @@ public sealed class StaffService(
         user.InviteExpiresAtUtc = dateTimeProvider.UtcNow.Add(InviteTokens.Lifetime);
         userRepository.Update(user);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        var userClinic = await clinicRepository.GetByIdAsync(clinicId, cancellationToken);
+        await notifications.QueueStaffInviteAsync(user, userClinic?.Name ?? "your clinic", token, user.InviteExpiresAtUtc.Value, userClinic?.TimeZone, cancellationToken);
 
         return Result<StaffInviteDto>.Ok(new StaffInviteDto(ToDto(user), token, user.InviteExpiresAtUtc.Value),
             "A new invite link was created. The previous link no longer works.");
