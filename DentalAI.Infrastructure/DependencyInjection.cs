@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IBillingRepository, BillingRepository>();
 
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
         AddNotificationProviders(services, configuration);
 
         services.AddScoped<IPasswordHasher, PasswordHasher>();

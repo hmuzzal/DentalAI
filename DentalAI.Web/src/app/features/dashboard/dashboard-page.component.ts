@@ -64,39 +64,41 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
         </div>
       </app-page-state>
 
-      <div class="panels">
-        <nz-card class="revenue" [nzTitle]="revenueTitle" [nzExtra]="revenueToggle">
-          <ng-template #revenueTitle>
-            <div class="card-title">
-              <span>Revenue</span>
-              <small>Payments received, last {{ revenueDays }} days</small>
-            </div>
-          </ng-template>
-          <ng-template #revenueToggle>
-            <nz-segmented [nzOptions]="revenueViews" [ngModel]="revenueView()" (ngModelChange)="revenueView.set($event)"
-                          nzSize="small" aria-label="Revenue view" />
-          </ng-template>
-
-          <app-page-state [status]="data.status()" (retry)="data.reload()" [rows]="5">
-            <div class="revenue__total">
-              <strong>{{ revenueTotal() }}</strong>
-              <span class="da-muted">total</span>
-            </div>
-
-            @if (revenueView() === 'Chart') {
-              <app-revenue-chart [bars]="revenueBars()" [currency]="billing.currency()" />
-            } @else {
-              <nz-table [nzData]="revenueRows()" nzSize="small" [nzPageSize]="10" [nzShowPagination]="true">
-                <thead><tr><th>Date</th><th nzAlign="right">Revenue</th></tr></thead>
-                <tbody>
-                  @for (row of revenueRows(); track row.key) {
-                    <tr><td>{{ row.label }}</td><td nzAlign="right" class="num">{{ money(row.value) }}</td></tr>
-                  }
-                </tbody>
-              </nz-table>
-            }
-          </app-page-state>
-        </nz-card>
+      <div class="panels" [class.panels--no-money]="!canSeeMoney">
+        @if (canSeeMoney) {
+          <nz-card class="revenue" [nzTitle]="revenueTitle" [nzExtra]="revenueToggle">
+            <ng-template #revenueTitle>
+              <div class="card-title">
+                <span>Revenue</span>
+                <small>Payments received, last {{ revenueDays }} days</small>
+              </div>
+            </ng-template>
+            <ng-template #revenueToggle>
+              <nz-segmented [nzOptions]="revenueViews" [ngModel]="revenueView()" (ngModelChange)="revenueView.set($event)"
+                            nzSize="small" aria-label="Revenue view" />
+            </ng-template>
+  
+            <app-page-state [status]="data.status()" (retry)="data.reload()" [rows]="5">
+              <div class="revenue__total">
+                <strong>{{ revenueTotal() }}</strong>
+                <span class="da-muted">total</span>
+              </div>
+  
+              @if (revenueView() === 'Chart') {
+                <app-revenue-chart [bars]="revenueBars()" [currency]="billing.currency()" />
+              } @else {
+                <nz-table [nzData]="revenueRows()" nzSize="small" [nzPageSize]="10" [nzShowPagination]="true">
+                  <thead><tr><th>Date</th><th nzAlign="right">Revenue</th></tr></thead>
+                  <tbody>
+                    @for (row of revenueRows(); track row.key) {
+                      <tr><td>{{ row.label }}</td><td nzAlign="right" class="num">{{ money(row.value) }}</td></tr>
+                    }
+                  </tbody>
+                </nz-table>
+              }
+            </app-page-state>
+          </nz-card>
+        }
 
         <div class="side">
           <nz-card [nzTitle]="todayTitle" [nzExtra]="calendarLink" class="today">
@@ -145,6 +147,9 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
 
     .panels { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: var(--da-space-4); align-items: start; }
     .side { display: grid; gap: var(--da-space-4); }
+    /* Receptionists: no revenue card, so today and the summary sit side by side. */
+    .panels--no-money { grid-template-columns: minmax(0, 1fr); }
+    .panels--no-money .side { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); align-items: start; }
     .card-title { display: grid; line-height: 1.3; }
     .card-title small { font-size: 12px; font-weight: 400; color: var(--da-ink-3); }
 
@@ -168,7 +173,7 @@ const compactCount = new Intl.NumberFormat('en-US', { notation: 'compact', maxim
     .glance dd { margin: 2px 0 0; font-size: 20px; font-weight: 600; color: var(--da-ink); }
 
     @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    @media (max-width: 1100px) { .panels { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 1100px) { .panels, .panels--no-money .side { grid-template-columns: minmax(0, 1fr); } }
     @media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -181,6 +186,8 @@ export class DashboardPageComponent {
   readonly booking = inject(BookingService);
 
   readonly status = APPOINTMENT_STATUS;
+  /** Practice money (the revenue card) is for clinic admins; the API leaves it out for receptionists. */
+  readonly canSeeMoney = this.authState.hasAnyRole(['ClinicAdmin']);
   readonly revenueDays = REVENUE_DAYS;
   readonly revenueViews = ['Chart', 'Table'];
   readonly revenueView = signal<'Chart' | 'Table'>('Chart');

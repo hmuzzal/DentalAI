@@ -18,7 +18,7 @@ public sealed record InvoiceSummary(Guid Id, string? Number, string Status, deci
 public sealed record CurrencyAmount(string Currency, decimal Amount);
 public sealed record InvoiceList(List<InvoiceSummary> Items, int TotalCount, List<CurrencyAmount> Outstanding);
 public sealed record RevenuePoint(string Period, decimal Revenue);
-public sealed record SchedulingDashboard(List<RevenuePoint> RevenueByDay);
+public sealed record SchedulingDashboard(List<RevenuePoint>? RevenueByDay);
 public sealed record InvoicePartyDoc(string Name, string? AddressLine1, string? CityLine);
 public sealed record InvoiceDocument(Invoice Invoice, InvoicePartyDoc Clinic, InvoicePartyDoc Patient, string ToothNumbering);
 
@@ -272,7 +272,7 @@ public sealed class BillingApiTests(ApiFactory factory)
 
         var dashboard = await SchedulingApi.ReadAsync<SchedulingDashboard>(await clinic.Admin.Http.GetAsync("/api/dashboard/scheduling"));
 
-        Assert.Equal(100m, dashboard.RevenueByDay.Sum(x => x.Revenue));
+        Assert.Equal(100m, dashboard.RevenueByDay!.Sum(x => x.Revenue));
     }
 
     // ---- helpers ----

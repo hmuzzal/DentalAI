@@ -41,7 +41,7 @@ const TICK_COUNT = 4;
 
         <div class="chart__bars">
           @for (bar of bars(); track bar.key; let i = $index) {
-            <div class="slot" tabindex="0" [attr.aria-label]="bar.label + ': ' + money(bar.value)"
+            <div class="slot" tabindex="0" [attr.aria-label]="bar.label + ': ' + value(bar.value)"
                  (pointerenter)="active.set(i)" (pointerleave)="active.set(null)"
                  (focus)="active.set(i)" (blur)="active.set(null)">
               @if (bar.value > 0) {
@@ -51,7 +51,7 @@ const TICK_COUNT = 4;
               }
               @if (active() === i) {
                 <div class="tooltip" [class.tooltip--left]="i > bars().length * 0.7" [class.tooltip--right]="i < bars().length * 0.3" role="tooltip">
-                  <strong>{{ money(bar.value) }}</strong>
+                  <strong>{{ value(bar.value) }}</strong>
                   <span>{{ bar.label }}</span>
                 </div>
               }
@@ -61,7 +61,7 @@ const TICK_COUNT = 4;
 
         <div class="chart__x" aria-hidden="true">
           @for (bar of bars(); track bar.key; let i = $index; let last = $last) {
-            <span>{{ i % 7 === 0 || last ? bar.label : '' }}</span>
+            <span>{{ i % labelEvery() === 0 || (last && i % labelEvery() >= labelEvery() / 2) ? bar.label : '' }}</span>
           }
         </div>
       </div>
@@ -103,9 +103,18 @@ export class RevenueChartComponent {
   readonly bars = input.required<RevenueBar[]>();
   /** ISO 4217 code of the clinic's currency. */
   readonly currency = input('USD');
+  /** What the bars are, for screen readers, e.g. "Daily revenue". */
+  readonly name = input('Daily revenue');
+  /** Money (in `currency`) or a whole-number count. */
+  readonly format = input<'money' | 'count'>('money');
+  /** Label every nth column on the x axis (and the last). */
+  readonly labelEvery = input(7);
   readonly active = signal<number | null>(null);
 
-  private readonly step = computed(() => niceStep(Math.max(0, ...this.bars().map((b) => b.value)) / TICK_COUNT));
+  private readonly step = computed(() => {
+    const raw = niceStep(Math.max(0, ...this.bars().map((b) => b.value)) / TICK_COUNT);
+    return this.format() === 'count' ? Math.max(1, Math.ceil(raw)) : raw; // no "0.5 visits" ticks
+  });
   private readonly max = computed(() => this.step() * TICK_COUNT);
 
   readonly ticksDesc = computed(() =>
@@ -127,23 +136,23 @@ export class RevenueChartComponent {
   readonly ariaLabel = computed(() => {
     const bars = this.bars();
     const total = bars.reduce((sum, bar) => sum + bar.value, 0);
-    return `Daily revenue, ${bars[0]?.label ?? ''} to ${bars.at(-1)?.label ?? ''}. Total ${this.money(total)}. Use the table view for every value.`;
+    return `${this.name()}, ${bars[0]?.label ?? ''} to ${bars.at(-1)?.label ?? ''}. Total ${this.value(total)}. Use the table view for every value.`;
   });
 
   pct(value: number): number {
     return (value / this.max()) * 100;
   }
 
-  money(value: number): string {
-    return formatMoney(value, this.currency(), { wholeUnits: true });
+  value(value: number): string {
+    return this.format() === 'count' ? value.toLocaleString('en-US') : formatMoney(value, this.currency(), { wholeUnits: true });
   }
 
   compact(value: number): string {
-    return value >= 10_000 ? formatMoney(value, this.currency(), { compact: true }) : this.money(value);
+    return value >= 10_000 && this.format() === 'money' ? formatMoney(value, this.currency(), { compact: true }) : this.value(value);
   }
 
   tickLabel(value: number): string {
     // One style per axis: compact once the axis reaches 10K.
-    return this.max() >= 10_000 ? formatMoney(value, this.currency(), { compact: true }) : this.money(value);
+    return this.max() >= 10_000 ? this.compact(value) : this.value(value);
   }
 }

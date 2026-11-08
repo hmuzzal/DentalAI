@@ -32,7 +32,13 @@ interface NavGroup {
 }
 
 const NAV_GROUPS: NavGroup[] = [
-  { label: 'Overview', items: [{ label: 'Dashboard', path: '/dashboard', icon: 'dashboard' }] },
+  {
+    label: 'Overview',
+    items: [
+      { label: 'Dashboard', path: '/dashboard', icon: 'dashboard' },
+      { label: 'Reports', path: '/reports', icon: 'bar-chart', roles: CLINIC_STAFF }
+    ]
+  },
   {
     label: 'Scheduling',
     roles: CLINIC_STAFF,

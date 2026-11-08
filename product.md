@@ -82,7 +82,7 @@ appointments, doctors, services or schedules:
 | 1.5 | US readiness: E.164 phones, clinic country, patient address and SMS consent, insurance | ✅ Done 2026-11-01 |
 | 2 | Billing, invoices and payments (provider-independent core; online payments via the clinic's own Stripe) | 🟡 2a and 2b done 2026-11-02; 2c online payments deferred (needs a Stripe account) |
 | 3 | Email and SMS reminders (SMTP / Twilio, outbox and background worker) | ✅ Done 2026-11-05 (delivery needs provider credentials) |
-| 4 | Reports and analytics | ⬜ (a basic dashboard exists) |
+| 4 | Reports and analytics | ✅ Done 2026-11-07 (practice report, receivables aging, CSV) |
 | 5 | Patient portal (self-booking) | ⬜ |
 | 6 | AI receptionist: chat (Claude, tool use against the scheduling API) | ⬜ |
 | 7 | Voice AI receptionist (telephony + speech) | ⬜ |
@@ -354,7 +354,28 @@ repatriation with a Bangladeshi accountant first.
 {trace id}" and log the exception under that ID; the exception text is only included in Development. Lock timeouts
 stay 409; requests the client aborted get no response.
 
-### Phases 4–10
+### Phase 4: reports ✅ Done 2026-11-07
+- **Reports** page (`/reports`, clinic staff), clinic time zone throughout, clinic billing currency only (invoices in
+  other currencies are counted and flagged, not summed).
+- **Practice** tab for any range up to 366 days (presets: this month, last month, last 90 days, this year, custom):
+  production (issued, not void invoices by issue date; subtotal minus discounts, before tax), collections (payments
+  minus refunds, by the day they happened), booked / completed / cancelled / no-shows, no-show rate (no-shows ÷
+  completed + no-shows), cancellation rate (cancelled ÷ booked), new patients, patients seen; each compared with the
+  previous range of the same length. Trend by day (≤ 31 days), week (≤ 92, Sunday start) or month, with a table view.
+  Breakdowns by doctor (through the invoice's appointment; "No appointment linked" otherwise), by service (invoice
+  lines before discounts) and by payment method.
+- **Receivables** tab: balances owed today, by days past the due date (not yet due, 1–30, 31–60, 61–90, 90+), per
+  patient, most overdue first; links to the patient's unpaid invoices.
+- CSV download for the trend, doctors, services and receivables (formula-safe cells).
+- API: `GET /api/reports/practice?from=&to=` (defaults to this month), `GET /api/reports/receivables`.
+- **Who sees money:** practice money is clinic admins only. Receptionists get the Practice tab with visit and patient
+  numbers (booked, completed, cancellations, no-shows, patients seen, new patients, service quantities); the API sends
+  every money figure as null, no payment methods and `includesMoney: false`. The dashboard revenue card is admins only
+  too (`revenueByDay`/`revenueByMonth` are null for receptionists). Receivables stay open to receptionists: they take
+  payments and chase balances.
+- Later: insurance vs patient portions in aging; doctor utilisation (booked ÷ scheduled hours); scheduled email of reports.
+
+### Phases 5–10
 Scoped in detail when each phase starts. Key dependencies:
 - The AI receptionist (6) builds on stable booking/reschedule APIs (1) and patient lookup by phone (1.5).
 - Voice (7) builds on chat (6) and telephony (3).

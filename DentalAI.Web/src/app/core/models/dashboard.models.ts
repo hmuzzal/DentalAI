@@ -18,8 +18,8 @@ export interface SchedulingDashboard {
   completedToday: number;
   cancelledToday: number;
   noShowsToday: number;
-  /** Completed-appointment revenue for the last 30 days. Days with no revenue are omitted. */
-  revenueByDay: RevenuePoint[];
-  /** Completed-appointment revenue for the last 12 months. */
-  revenueByMonth: RevenuePoint[];
+  /** Payments received over the last 30 days; days with none are omitted. Null for receptionists (admins only). */
+  revenueByDay: RevenuePoint[] | null;
+  /** Payments received over the last 12 months. Null for receptionists. */
+  revenueByMonth: RevenuePoint[] | null;
 }

@@ -98,6 +98,13 @@ export const routes: Routes = [
           import('./features/settings/notification-settings-page.component').then((m) => m.NotificationSettingsPageComponent)
       },
       {
+        path: 'reports',
+        title: 'Reports',
+        canActivate: [roleGuard],
+        data: { roles: CLINIC_STAFF },
+        loadComponent: () => import('./features/reports/reports-page.component').then((m) => m.ReportsPageComponent)
+      },
+      {
         path: 'messages',
         title: 'Messages',
         canActivate: [roleGuard],

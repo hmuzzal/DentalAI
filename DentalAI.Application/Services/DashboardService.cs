@@ -3,6 +3,7 @@ using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
 using DentalAI.Application.DTOs.Dashboard;
 using DentalAI.Application.Interfaces;
+using DentalAI.Domain.Enums;
 
 namespace DentalAI.Application.Services;
 
@@ -13,6 +14,7 @@ public sealed class DashboardService(
     IServiceRepository serviceRepository,
     ISchedulingRepository schedulingRepository,
     IBillingRepository billingRepository,
+    ICurrentUserService currentUser,
     IDateTimeProvider dateTimeProvider) : IDashboardService
 {
     public async Task<Result<DashboardStatsDto>> GetStatsAsync(CancellationToken cancellationToken)
@@ -41,11 +43,16 @@ public sealed class DashboardService(
         // "Today" and revenue days/months follow each appointment's clinic calendar, not UTC.
         var utcNow = dateTimeProvider.UtcNow;
         var todayRows = await GetTodayWindowRowsAsync(utcNow, cancellationToken);
+        var upcoming = await appointmentRepository.CountUpcomingAsync(utcNow, cancellationToken);
+
+        // Practice money is for clinic admins: receptionists get the day's counts and no revenue.
+        if (!currentUser.IsInRole(UserRole.ClinicAdmin))
+            return Result<SchedulingDashboardDto>.Ok(DashboardCalculator.Build(todayRows, [], upcoming, utcNow)
+                with { RevenueByDay = null, RevenueByMonth = null });
+
         var (revenueFrom, revenueTo) = DashboardCalculator.RevenueWindowUtc(utcNow);
         // Revenue is money actually received: payments, minus refunds on the day they were refunded.
         var revenueRows = await billingRepository.GetRevenueRowsAsync(revenueFrom, revenueTo, cancellationToken);
-        var upcoming = await appointmentRepository.CountUpcomingAsync(utcNow, cancellationToken);
-
         return Result<SchedulingDashboardDto>.Ok(DashboardCalculator.Build(todayRows, revenueRows, upcoming, utcNow));
     }
 
