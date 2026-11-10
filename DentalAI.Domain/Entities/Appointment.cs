@@ -13,6 +13,7 @@ public sealed class Appointment : BaseEntity, ITenantEntity
     public DateTime EndTime { get; set; }
     public string? Notes { get; set; }
     public AppointmentStatus Status { get; set; } = AppointmentStatus.Pending;
+    public AppointmentSource Source { get; set; } = AppointmentSource.Staff;
 
     public Clinic? Clinic { get; set; }
     public Doctor? Doctor { get; set; }

@@ -15,6 +15,8 @@ export interface Appointment {
   notes?: string | null;
   /** IANA zone of the appointment's clinic; show its times in this zone. */
   clinicTimeZone?: string | null;
+  /** "Portal" when the patient booked it online. */
+  source?: 'Staff' | 'Portal';
 }
 
 export interface CreateAppointmentRequest {

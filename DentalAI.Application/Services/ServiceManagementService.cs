@@ -48,7 +48,8 @@ public sealed class ServiceManagementService(
             Description = request.Description?.Trim(),
             Price = request.Price,
             DurationMinutes = request.DurationMinutes,
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            BookableOnline = request.BookableOnline
         };
 
         await serviceRepository.AddAsync(service, cancellationToken);
@@ -70,6 +71,7 @@ public sealed class ServiceManagementService(
         service.Price = request.Price;
         service.DurationMinutes = request.DurationMinutes;
         service.IsActive = request.IsActive;
+        service.BookableOnline = request.BookableOnline;
 
         serviceRepository.Update(service);
         await unitOfWork.SaveChangesAsync(cancellationToken);

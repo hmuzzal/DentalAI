@@ -66,6 +66,13 @@ import { optional, saveErrorText, touchAll } from '../../shared/forms';
             </label>
           </nz-form-control>
         </nz-form-item>
+        <nz-form-item>
+          <nz-form-control nzExtra="Patients can choose it on the clinic's online booking page.">
+            <label class="switch">
+              <nz-switch formControlName="bookableOnline" /> <span>Bookable online</span>
+            </label>
+          </nz-form-control>
+        </nz-form-item>
         <button type="submit" hidden></button>
       </form>
     </app-form-drawer>
@@ -94,7 +101,8 @@ export class ServiceFormDrawerComponent {
     durationMinutes: [30, [Validators.required, Validators.min(5), Validators.max(480)]],
     price: [0, [Validators.required, Validators.min(0)]],
     description: ['', Validators.maxLength(1000)],
-    isActive: [true]
+    isActive: [true],
+    bookableOnline: [true]
   });
 
   constructor() {
@@ -108,7 +116,8 @@ export class ServiceFormDrawerComponent {
           durationMinutes: service?.durationMinutes ?? 30,
           price: service?.price ?? 0,
           description: service?.description ?? '',
-          isActive: service?.isActive ?? true
+          isActive: service?.isActive ?? true,
+          bookableOnline: service?.bookableOnline ?? true
         });
       });
     });
@@ -127,7 +136,8 @@ export class ServiceFormDrawerComponent {
       description: optional(value.description),
       price: value.price,
       durationMinutes: value.durationMinutes,
-      isActive: value.isActive
+      isActive: value.isActive,
+      bookableOnline: value.bookableOnline
     };
     const service = this.service();
     const call = service ? this.servicesCatalog.update(service.id, request) : this.servicesCatalog.create(request);

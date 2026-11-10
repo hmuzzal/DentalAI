@@ -92,7 +92,7 @@ public sealed class MessageDispatcher(
             message.SentAtUtc = nowUtc;
             message.ProviderMessageId = result.ProviderMessageId;
             message.LastError = null;
-            if (message.RedactBodyAfterSend) message.Body = "[Contents removed after sending: it contained a one-time link.]";
+            if (message.RedactBodyAfterSend) message.Body = "[Contents removed after sending: it contained a one-time link or code.]";
             return;
         }
 

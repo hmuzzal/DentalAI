@@ -34,6 +34,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("ConnectionStrings:DefaultConnection", ConnectionString(_databaseName));
         // The tests run the reminder and sending jobs themselves, at chosen times.
         builder.UseSetting("Notifications:BackgroundJobsEnabled", "false");
+        // Every test client shares one address; the per-IP sign-in limit is tested separately.
+        builder.UseSetting("Portal:SignInRequestsPerMinute", "100000");
         builder.UseSetting("Notifications:Sms:Twilio:AuthToken", TwilioTestAuthToken);
         builder.UseSetting("Notifications:Sms:Twilio:InboundWebhookUrl", TwilioWebhookUrl);
     }

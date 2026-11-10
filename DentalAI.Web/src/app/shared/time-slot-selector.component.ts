@@ -2,10 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, model, sig
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzSkeletonModule } from 'ng-zorro-antd/skeleton';
-import { catchError, map, of, startWith, switchMap } from 'rxjs';
+import { catchError, map, Observable, of, startWith, switchMap } from 'rxjs';
 import { AvailableSlot } from '../core/models/scheduling.models';
 import { SchedulingService } from '../core/services/scheduling.service';
 import { formatInZone, hourInZone } from '../core/time-zone';
+
+/** Loads open times. Defaults to the staff scheduling API; the patient portal passes its own. */
+export type SlotLoader = (doctorId: string, date: string, serviceId: string, excludeAppointmentId: string | null) => Observable<AvailableSlot[]>;
 
 type SlotState =
   | { status: 'idle' }
@@ -84,6 +87,7 @@ export class TimeSlotSelectorComponent {
   /** Bump to force a reload (e.g. after a booking conflict). */
   readonly refresh = input(0);
   readonly selected = model<AvailableSlot | null>(null);
+  readonly loader = input<SlotLoader | null>(null);
 
   private readonly retries = signal(0);
 
@@ -92,16 +96,18 @@ export class TimeSlotSelectorComponent {
     serviceId: this.serviceId(),
     date: this.date(),
     excludeAppointmentId: this.excludeAppointmentId(),
-    refresh: this.refresh() + this.retries()
+    refresh: this.refresh() + this.retries(),
+    loader: this.loader()
   }));
 
   readonly state = toSignal(
     toObservable(this.request).pipe(
-      switchMap(({ doctorId, serviceId, date, excludeAppointmentId }) => {
+      switchMap(({ doctorId, serviceId, date, excludeAppointmentId, loader }) => {
         if (!doctorId || !serviceId || !date) {
           return of<SlotState>({ status: 'idle' });
         }
-        return this.scheduling.getAvailableSlots(doctorId, date, serviceId, excludeAppointmentId).pipe(
+        const load: SlotLoader = loader ?? ((d, day, s, e) => this.scheduling.getAvailableSlots(d, day, s, e));
+        return load(doctorId, date, serviceId, excludeAppointmentId).pipe(
           map((slots): SlotState => ({ status: 'ready', slots })),
           catchError(() => of<SlotState>({ status: 'error' })),
           startWith<SlotState>({ status: 'loading' })

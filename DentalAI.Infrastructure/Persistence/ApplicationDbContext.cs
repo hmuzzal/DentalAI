@@ -32,6 +32,9 @@ public sealed class ApplicationDbContext(
     public DbSet<DoctorBreak> DoctorBreaks => Set<DoctorBreak>();
     public DbSet<DoctorLeave> DoctorLeaves => Set<DoctorLeave>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<ClinicPortalSettings> ClinicPortalSettings => Set<ClinicPortalSettings>();
+    public DbSet<PortalSignInCode> PortalSignInCodes => Set<PortalSignInCode>();
+    public DbSet<PatientPortalSession> PatientPortalSessions => Set<PatientPortalSession>();
 
     private Guid? CurrentClinicId => currentUserService.ClinicId;
 
@@ -143,7 +146,8 @@ public sealed class ApplicationDbContext(
     private void ApplyAuditInformation()
     {
         var utcNow = dateTimeProvider.UtcNow;
-        var actor = currentUserService.Email ?? "system";
+        var actor = currentUserService.Email
+            ?? (currentUserService.PatientId is { } patientId ? $"patient:{patientId:N}" : "system");
 
         foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {

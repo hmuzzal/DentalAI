@@ -4,6 +4,7 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 import { catchError, throwError } from 'rxjs';
 import { AuthStateService } from '../services/auth-state.service';
 import { SILENT_ERRORS } from './http-context';
+import { isPortalRequest } from '../services/portal-session.service';
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const messages = inject(NzMessageService);
@@ -15,7 +16,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         return throwError(() => error);
       }
 
-      if (error.status === 401) {
+      if (error.status === 401 && isPortalRequest(req.url)) {
+        // The patient session: the auth interceptor refreshes it, or signs the patient out. Staff stay signed in.
+      } else if (error.status === 401) {
         // Session expired or token invalid: send the user back to sign in.
         if (authState.isAuthenticated()) {
           messages.warning('Your session has expired. Please sign in again.');

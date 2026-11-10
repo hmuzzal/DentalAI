@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using DentalAI.Application.Common.Interfaces;
+using DentalAI.Application.Common.Portal;
 using DentalAI.Domain.Enums;
 
 namespace DentalAI.Api.Infrastructure;
@@ -8,6 +9,7 @@ public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor)
 {
     public Guid? UserId => TryParseGuid(ClaimTypes.NameIdentifier);
     public Guid? ClinicId => TryParseGuid("clinicId");
+    public Guid? PatientId => TryParseGuid(PortalClaims.PatientId);
     public string? Email => httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.Email);
     public bool IsAuthenticated => httpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated ?? false;
     public bool IsSuperAdmin => IsInRole(UserRole.SuperAdmin);

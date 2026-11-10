@@ -5,6 +5,8 @@ using DentalAI.Api.Middleware;
 using DentalAI.Api.Models;
 using DentalAI.Application;
 using DentalAI.Application.Common.Interfaces;
+using DentalAI.Application.Common.Portal;
+using System.Threading.RateLimiting;
 using DentalAI.Domain.Enums;
 using DentalAI.Infrastructure;
 using DentalAI.Infrastructure.Configuration;
@@ -102,22 +104,35 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SecretKey));
+if (string.Equals(jwtOptions.Audience, jwtOptions.PortalAudience, StringComparison.Ordinal))
+{
+    throw new InvalidOperationException("Jwt:PortalAudience must differ from Jwt:Audience, or patient tokens would work on staff endpoints.");
+}
 
+// Two bearer schemes with different audiences. The default picks one by path: /api/portal/* accepts patient tokens
+// only, everything else staff tokens only. So a patient token is useless outside the portal, and vice versa.
 builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddAuthentication(AuthSchemes.Selector)
+    .AddPolicyScheme(AuthSchemes.Selector, "Staff or portal", options =>
     {
+        options.ForwardDefaultSelector = context =>
+            AuthSchemes.IsPortalPath(context.Request.Path) ? AuthSchemes.Portal : AuthSchemes.Staff;
+    })
+    .AddJwtBearer(AuthSchemes.Staff, options => ConfigureBearer(options, jwtOptions.Audience))
+    .AddJwtBearer(AuthSchemes.Portal, options => ConfigureBearer(options, jwtOptions.PortalAudience));
+
+void ConfigureBearer(JwtBearerOptions options, string audience)
+{
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtOptions.Issuer,
-            ValidAudience = jwtOptions.Audience,
+            ValidAudience = audience,
             IssuerSigningKey = signingKey,
             ClockSkew = TimeSpan.Zero
         };
-
         options.Events = new JwtBearerEvents
         {
             OnAuthenticationFailed = context =>
@@ -139,7 +154,7 @@ builder.Services
                 return Task.CompletedTask;
             }
         };
-    });
+}
 
 builder.Services.AddAuthorization(options =>
 {
@@ -152,6 +167,29 @@ builder.Services.AddAuthorization(options =>
     // Clinic data: clinic staff only. Platform admins are deliberately excluded.
     options.AddPolicy(AuthorizationPolicies.ClinicStaff, policy =>
         policy.RequireRole(UserRole.ClinicAdmin.ToString(), UserRole.Receptionist.ToString()));
+
+    // The patient portal: a patient token (its own scheme and audience) for one patient of one clinic.
+    options.AddPolicy(AuthorizationPolicies.PortalPatient, policy => policy
+        .AddAuthenticationSchemes(AuthSchemes.Portal)
+        .RequireRole(PortalClaims.PatientRole)
+        .RequireClaim(PortalClaims.PatientId)
+        .RequireClaim(PortalClaims.ClinicId));
+});
+
+// Sign-in codes are guessable in principle: limit sign-in calls per client IP (on top of the per-contact limits).
+var portalSignInPerMinute = Math.Max(1, builder.Configuration.GetValue("Portal:SignInRequestsPerMinute", 20));
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(PortalRateLimits.SignIn, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = portalSignInPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.OnRejected = async (context, cancellationToken) =>
+        await context.HttpContext.Response.WriteAsJsonAsync(new ApiResponse
+        {
+            Success = false,
+            Message = "Too many attempts. Please wait a minute and try again."
+        }, cancellationToken);
 });
 
 var allowedCorsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -181,6 +219,7 @@ app.UseSwaggerUI(options =>
 });
 app.UseHttpsRedirection();
 app.UseCors(CorsPolicyName);
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

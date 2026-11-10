@@ -115,6 +115,7 @@ const LAYOUTS: Layout[] = ['calendar', 'list'];
                       @if (view() !== 'month') {
                         <span>{{ item.doctorName }} · {{ item.serviceName }}</span>
                         <nz-tag [nzColor]="status[item.status].color">{{ status[item.status].label }}</nz-tag>
+                        @if (item.source === 'Portal') { <nz-tag nzColor="purple" title="Booked by the patient online">Online</nz-tag> }
                         <div class="appointment__actions">
                           @if (item.status === 'Completed') {
                             <button nz-button nzType="link" nzSize="small" (click)="openInvoice(item)" [nzLoading]="invoicingId() === item.id"
@@ -165,7 +166,8 @@ const LAYOUTS: Layout[] = ['calendar', 'list'];
                     <td><strong>{{ item.patientName }}</strong></td>
                     <td>{{ item.doctorName }}</td>
                     <td>{{ item.serviceName }}</td>
-                    <td><nz-tag [nzColor]="status[item.status].color">{{ status[item.status].label }}</nz-tag></td>
+                    <td><nz-tag [nzColor]="status[item.status].color">{{ status[item.status].label }}</nz-tag>
+                      @if (item.source === 'Portal') { <nz-tag nzColor="purple">Online</nz-tag> }</td>
                     <td nzAlign="right" class="nowrap">
                       @if (item.status === 'Completed') {
                         <button nz-button nzType="link" nzSize="small" (click)="openInvoice(item)" [nzLoading]="invoicingId() === item.id"

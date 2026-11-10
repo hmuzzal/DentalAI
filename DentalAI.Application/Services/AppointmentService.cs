@@ -37,7 +37,11 @@ public sealed class AppointmentService(
             : Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment));
     }
 
-    public async Task<Result<AppointmentDto>> CreateAppointmentAsync(CreateAppointmentRequest request, CancellationToken cancellationToken)
+    public Task<Result<AppointmentDto>> CreateAppointmentAsync(CreateAppointmentRequest request, CancellationToken cancellationToken) =>
+        CreateAppointmentAsync(request, AppointmentSource.Staff, confirmed: false, cancellationToken);
+
+    public async Task<Result<AppointmentDto>> CreateAppointmentAsync(
+        CreateAppointmentRequest request, AppointmentSource source, bool confirmed, CancellationToken cancellationToken)
     {
         if (request.StartTime <= dateTimeProvider.UtcNow)
         {
@@ -80,6 +84,8 @@ public sealed class AppointmentService(
                 StartTime = request.StartTime,
                 EndTime = endTime,
                 Notes = request.Notes?.Trim(),
+                Source = source,
+                Status = confirmed ? AppointmentStatus.Confirmed : AppointmentStatus.Pending,
                 Doctor = doctor,
                 Patient = patient,
                 Service = service

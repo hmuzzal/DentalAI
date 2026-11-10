@@ -10,6 +10,7 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
     {
         builder.ToTable("Appointments");
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50);
+        builder.Property(x => x.Source).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.Notes).HasMaxLength(2000);
         builder.Property(x => x.StartTime).HasColumnType("datetime2");
         builder.Property(x => x.EndTime).HasColumnType("datetime2");

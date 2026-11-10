@@ -78,12 +78,12 @@ appointments, doctors, services or schedules:
 | # | Phase | Status |
 |---|---|---|
 | 0 | Foundation: auth, multi-tenancy, clinics, doctors, services, patients, dashboard | ✅ Done (committed) |
-| 1 | Scheduling engine | 🟡 ~80%: core built, uncommitted, gaps below |
+| 1 | Scheduling engine | ✅ Done 2026-11-01 |
 | 1.5 | US readiness: E.164 phones, clinic country, patient address and SMS consent, insurance | ✅ Done 2026-11-01 |
 | 2 | Billing, invoices and payments (provider-independent core; online payments via the clinic's own Stripe) | 🟡 2a and 2b done 2026-11-02; 2c online payments deferred (needs a Stripe account) |
 | 3 | Email and SMS reminders (SMTP / Twilio, outbox and background worker) | ✅ Done 2026-11-05 (delivery needs provider credentials) |
 | 4 | Reports and analytics | ✅ Done 2026-11-07 (practice report, receivables aging, CSV) |
-| 5 | Patient portal (self-booking) | ⬜ |
+| 5 | Patient portal (self-booking) | 🟡 In progress (planned 2026-11-08) |
 | 6 | AI receptionist: chat (Claude, tool use against the scheduling API) | ⬜ |
 | 7 | Voice AI receptionist (telephony + speech) | ⬜ |
 | 8 | Mobile app | ⬜ |
@@ -375,7 +375,57 @@ stay 409; requests the client aborted get no response.
   payments and chase balances.
 - Later: insurance vs patient portions in aging; doctor utilisation (booked ÷ scheduled hours); scheduled email of reports.
 
-### Phases 5–10
+### Phase 5: patient portal ✅ Done 2026-11-08
+Patients of a clinic sign in on the clinic's own portal page, book, reschedule and cancel, and see their invoices.
+Same booking API and engine as the front desk (core principle 3).
+
+**Decisions**
+- **One portal per clinic** at `/p/{slug}` (e.g. `/p/smile-dental`). Off until the clinic's admin turns it on.
+- **No passwords.** A patient types their email or mobile number and gets a 6-digit code by email or text. Codes expire after
+  10 minutes, allow 5 tries, are stored hashed, and are removed from the message log once sent. At most 3 codes per
+  contact per 15 minutes; the sign-in endpoints are also rate-limited per IP.
+- **No account enumeration.** The answer is always "if that's on file, we sent a code". When new patients are allowed,
+  a code is sent to unknown contacts too, and after verifying they fill a short form (name, date of birth, phone, email) that
+  creates the patient record.
+- **Shared contacts (families).** One phone or email can belong to several patients. After the code, the person picks
+  who they're booking for (first name and last initial); each patient has their own session.
+- **Separate patient tokens.** Patient access tokens have their own audience and authentication scheme, so they're
+  rejected by every staff endpoint, and staff tokens by every portal endpoint. 30-minute access token, 30-day refresh
+  token (hashed, rotated on use, revocable), in a `PatientPortalSessions` table. The token carries the clinic, so the
+  tenant filter works as for staff; every portal query is also limited to the signed-in patient.
+- **Clinic rules** (`ClinicPortalSettings`, admins): enabled, slug, allow new patients, auto-confirm online bookings
+  (default off: they arrive as Pending for the front desk), minimum notice (default 2 h), how far ahead (default 90
+  days), cancel/reschedule cutoff (default 24 h before), most upcoming online bookings per patient (default 3). Each service has an
+  "Bookable online" switch (default on).
+- **Staff see where a booking came from:** `Appointment.Source` (Staff or Portal); "Online" tag in the Appointments list.
+- Patients see invoices that are issued, partly paid or paid (not drafts or void), with no staff-only fields.
+
+**5a: API**
+- [x] Entities and migration: `ClinicPortalSettings`, `PortalSignInCode`, `PatientPortalSession`, `Service.BookableOnline`,
+  `Appointment.Source`; `MessageKind.PortalCode`
+- [x] `GET /portal/{slug}`: clinic name, phone, address, time zone, whether new patients may register (anonymous)
+- [x] `POST /portal/{slug}/auth/start` (send code), `/verify` (code → patients to choose or a registration ticket),
+  `/select`, `/register`, `/refresh`, `/logout`
+- [x] `GET/PUT /portal/me` (profile: contact details, address, SMS consent)
+- [x] `GET /portal/services`, `/portal/doctors`, `/portal/slots?doctorId&serviceId&date`
+- [x] `GET /portal/appointments`, `POST /portal/appointments`, `POST /portal/appointments/{id}/reschedule`, `/cancel`
+- [x] `GET /portal/invoices`, `GET /portal/invoices/{id}`
+- [x] Staff: `GET/PUT /portal-settings` (admins); `BookableOnline` on services; `Source` on appointments
+- [x] Tests: sign-in (expiry, attempts, throttle, enumeration-safe answers, shared contacts, registration), token
+  separation both ways, patient isolation (another patient's appointment and invoice → 404), clinic rules (disabled,
+  notice, horizon, cutoff, limit), booking through the engine (conflict → 409)
+
+**5b: UI**
+- [x] Portal pages outside the staff shell: sign in (contact → code), choose patient, register, home (upcoming visits),
+  book (service → doctor → day → time → confirm), reschedule / cancel, invoices, profile. Mobile-first.
+- [x] Separate portal session (own storage key and interceptor branch; a portal 401 never signs staff out)
+- [x] Staff: Settings › Patient portal (switches, rules, slug, copy link); "Bookable online" on the service form;
+  "Online" tag on appointments
+
+Not yet tested: the per-IP sign-in rate limit (raised in tests), and the portal UI in a browser (Angular builds; API flow checked end to end).
+Later: pay invoices online (needs 2c), intake forms, "first available doctor", insurance card upload, Bengali.
+
+### Phases 6–10
 Scoped in detail when each phase starts. Key dependencies:
 - The AI receptionist (6) builds on stable booking/reschedule APIs (1) and patient lookup by phone (1.5).
 - Voice (7) builds on chat (6) and telephony (3).

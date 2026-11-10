@@ -88,7 +88,8 @@ public sealed class SchedulingRepository(ApplicationDbContext dbContext) : ISche
                 x.Doctor!.FirstName + " " + x.Doctor.LastName,
                 x.PatientId, x.Patient!.FirstName + " " + x.Patient.LastName,
                 x.ServiceId, x.Service!.Name, x.StartTime, x.EndTime, x.Status,
-                x.Clinic != null ? x.Clinic.TimeZone : null))
+                x.Clinic != null ? x.Clinic.TimeZone : null,
+                x.Source))
             .ToListAsync(cancellationToken);
     }
 

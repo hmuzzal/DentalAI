@@ -56,6 +56,11 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ServiceId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<DateTime>("StartTime")
                         .HasColumnType("datetime2");
 
@@ -269,6 +274,68 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                         .HasFilter("[ClinicId] IS NOT NULL");
 
                     b.ToTable("ClinicNotificationSettings", (string)null);
+                });
+
+            modelBuilder.Entity("DentalAI.Domain.Entities.ClinicPortalSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AllowNewPatients")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AutoConfirm")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CancelCutoffHours")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("ClinicId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MaxDaysAhead")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxUpcomingAppointments")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MinNoticeHours")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClinicId")
+                        .IsUnique()
+                        .HasFilter("[ClinicId] IS NOT NULL");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("ClinicPortalSettings", (string)null);
                 });
 
             modelBuilder.Entity("DentalAI.Domain.Entities.Doctor", b =>
@@ -925,6 +992,59 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                     b.ToTable("PatientInsurances", (string)null);
                 });
 
+            modelBuilder.Entity("DentalAI.Domain.Entities.PatientPortalSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ClinicId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastUsedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClinicId");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("PatientPortalSessions", (string)null);
+                });
+
             modelBuilder.Entity("DentalAI.Domain.Entities.Payment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -983,6 +1103,74 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("ClinicId", "ReceivedAtUtc");
 
                     b.ToTable("Payments", (string)null);
+                });
+
+            modelBuilder.Entity("DentalAI.Domain.Entities.PortalSignInCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<Guid?>("ClinicId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Contact")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("TicketExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TicketHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketHash")
+                        .HasFilter("[TicketHash] IS NOT NULL");
+
+                    b.HasIndex("ClinicId", "Contact", "CreatedDate");
+
+                    b.ToTable("PortalSignInCodes", (string)null);
                 });
 
             modelBuilder.Entity("DentalAI.Domain.Entities.RefreshToken", b =>
@@ -1089,6 +1277,9 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("BookableOnline")
+                        .HasColumnType("bit");
 
                     b.Property<Guid?>("ClinicId")
                         .HasColumnType("uniqueidentifier");
@@ -1248,6 +1439,14 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Service");
                 });
 
+            modelBuilder.Entity("DentalAI.Domain.Entities.ClinicPortalSettings", b =>
+                {
+                    b.HasOne("DentalAI.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("DentalAI.Domain.Entities.Doctor", b =>
                 {
                     b.HasOne("DentalAI.Domain.Entities.Clinic", "Clinic")
@@ -1341,6 +1540,22 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("DentalAI.Domain.Entities.PatientPortalSession", b =>
+                {
+                    b.HasOne("DentalAI.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DentalAI.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("DentalAI.Domain.Entities.Payment", b =>
                 {
                     b.HasOne("DentalAI.Domain.Entities.Invoice", "Invoice")
@@ -1350,6 +1565,14 @@ namespace DentalAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Invoice");
+                });
+
+            modelBuilder.Entity("DentalAI.Domain.Entities.PortalSignInCode", b =>
+                {
+                    b.HasOne("DentalAI.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("DentalAI.Domain.Entities.RefreshToken", b =>

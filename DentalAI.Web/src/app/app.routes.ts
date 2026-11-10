@@ -6,6 +6,11 @@ import { AppShellComponent } from './layout/app-shell.component';
 
 export const routes: Routes = [
   {
+    // A clinic's patient portal: its own layout and session, outside the staff app.
+    path: 'p/:slug',
+    loadChildren: () => import('./features/portal/portal.routes').then((m) => m.PORTAL_ROUTES)
+  },
+  {
     path: 'auth',
     loadChildren: () => import('./features/auth/auth.routes').then((m) => m.AUTH_ROUTES)
   },
@@ -96,6 +101,13 @@ export const routes: Routes = [
         data: { roles: ['ClinicAdmin'] },
         loadComponent: () =>
           import('./features/settings/notification-settings-page.component').then((m) => m.NotificationSettingsPageComponent)
+      },
+      {
+        path: 'settings/portal',
+        title: 'Patient portal',
+        canActivate: [roleGuard],
+        data: { roles: ['ClinicAdmin'] },
+        loadComponent: () => import('./features/settings/portal-settings-page.component').then((m) => m.PortalSettingsPageComponent)
       },
       {
         path: 'reports',

@@ -91,6 +91,8 @@ public sealed class InvoiceListQuery
     public Guid? AppointmentId { get; set; }
     /// <summary>Only invoices with money still owed (Issued or PartiallyPaid).</summary>
     public bool OutstandingOnly { get; set; }
+    /// <summary>Only invoices a patient may see: issued, partly paid or paid (no drafts, nothing void).</summary>
+    public bool IssuedOnly { get; set; }
     /// <summary>Matches the invoice number or the patient's name.</summary>
     public string? Search { get; set; }
     /// <summary>Issue date range (drafts: creation date), clinic-local.</summary>

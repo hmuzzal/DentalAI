@@ -81,6 +81,36 @@ public sealed class NotificationService(
         }
     }
 
+    /// <summary>
+    /// Sends a portal sign-in code right away (no quiet hours: the person just asked for it). The clinic's email and
+    /// text switches don't apply, and the logged copy loses its text once sent.
+    /// </summary>
+    public async Task QueuePortalCodeAsync(Guid clinicId, string clinicName, MessageChannel channel, string to, string code,
+        int validMinutes, Guid? patientId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var (subject, body) = MessageTemplates.PortalCode(channel, clinicName, code, validMinutes);
+            repository.AddMessage(new OutboundMessage
+            {
+                ClinicId = clinicId,
+                Channel = channel,
+                Kind = MessageKind.PortalCode,
+                To = to,
+                Subject = subject,
+                Body = body,
+                RedactBodyAfterSend = true,
+                PatientId = patientId,
+                NotBeforeUtc = clock.UtcNow
+            });
+            await repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Could not queue a portal sign-in code for clinic {ClinicId}", clinicId);
+        }
+    }
+
     /// <summary>Adds (does not save) one appointment message on the patient's channel, respecting quiet hours.</summary>
     internal OutboundMessage? AddAppointmentMessage(AppointmentForMessage data, ClinicNotificationSettings settings, MessageKind kind, int? reminderHours,
         DateTime nowUtc)
@@ -216,7 +246,9 @@ public sealed class NotificationService(
         s.QuietHoursStart, s.QuietHoursEnd, email.IsLive, sms.IsLive);
 
     private static OutboundMessageDto ToDto(OutboundMessage m, string? patientName = null) => new(
-        m.Id, m.Channel, m.Kind, m.To, m.Subject, m.Body, m.Status, m.PatientId, patientName, m.AppointmentId, m.ReminderHours,
+        m.Id, m.Channel, m.Kind, m.To, m.Subject,
+        // Staff never see a sign-in code, not even while it waits to be sent: it would let them sign in as the patient.
+        m.Kind == MessageKind.PortalCode ? "[Sign-in code hidden]" : m.Body, m.Status, m.PatientId, patientName, m.AppointmentId, m.ReminderHours,
         DateTime.SpecifyKind(m.CreatedDate, DateTimeKind.Utc), DateTime.SpecifyKind(m.NotBeforeUtc, DateTimeKind.Utc),
         m.SentAtUtc is { } sent ? DateTime.SpecifyKind(sent, DateTimeKind.Utc) : null, m.Attempts, m.LastError);
 

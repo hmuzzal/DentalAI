@@ -17,7 +17,9 @@ public enum MessageKind
     StaffInvite = 4,
     Test = 5,
     /// <summary>An automatic answer to a patient's text (e.g. "Thanks, you're confirmed").</summary>
-    Reply = 6
+    Reply = 6,
+    /// <summary>A patient portal sign-in code. Removed from the log once sent.</summary>
+    PortalCode = 7
 }
 
 public enum MessageStatus

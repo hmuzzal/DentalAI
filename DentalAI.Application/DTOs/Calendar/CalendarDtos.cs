@@ -18,6 +18,8 @@ public sealed record CalendarAppointmentDto(
     DateTime EndTimeUtc,
     AppointmentStatus Status,
     /// <summary>IANA time zone of the appointment's clinic; clients show times in it.</summary>
-    string? ClinicTimeZone);
+    string? ClinicTimeZone,
+    /// <summary>Booked by the front desk or by the patient online.</summary>
+    AppointmentSource Source = AppointmentSource.Staff);
 
 public sealed record CalendarDto(DateOnly FromDate, DateOnly ToDate, IReadOnlyList<CalendarAppointmentDto> Appointments);

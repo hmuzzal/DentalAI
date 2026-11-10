@@ -1,5 +1,5 @@
 export type MessageChannel = 'Email' | 'Sms';
-export type MessageKind = 'BookingConfirmation' | 'Reminder' | 'Rescheduled' | 'Cancelled' | 'StaffInvite' | 'Test' | 'Reply';
+export type MessageKind = 'BookingConfirmation' | 'Reminder' | 'Rescheduled' | 'Cancelled' | 'StaffInvite' | 'Test' | 'Reply' | 'PortalCode';
 export type MessageStatus = 'Pending' | 'Sending' | 'Sent' | 'Failed' | 'Skipped' | 'Cancelled';
 
 /** Times are "HH:mm:ss" in the clinic's time zone. */
@@ -64,5 +64,6 @@ export const MESSAGE_KIND_LABELS: Record<MessageKind, string> = {
   Cancelled: 'Cancellation notice',
   StaffInvite: 'Staff invite',
   Test: 'Test message',
-  Reply: 'Reply'
+  Reply: 'Reply',
+  PortalCode: 'Portal sign-in code'
 };

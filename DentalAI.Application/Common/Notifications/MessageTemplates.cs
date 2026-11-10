@@ -53,6 +53,14 @@ public static class MessageTemplates
          $"Set your password here (the link works once and expires {expiresLocal:MMM d, h:mm tt}):\n{link}\n\n" +
          "If you weren't expecting this, you can ignore this email.");
 
+    /// <summary>A patient portal sign-in code. Sent only because the person asked for it on the portal.</summary>
+    public static (string? Subject, string Body) PortalCode(MessageChannel channel, string clinicName, string code, int validMinutes) =>
+        channel == MessageChannel.Sms
+            ? (null, $"{clinicName}: your sign-in code is {code}. It expires in {validMinutes} minutes. Don't share it with anyone.")
+            : ($"Your sign-in code for {clinicName}",
+               $"Your sign-in code is:\n\n{code}\n\nIt expires in {validMinutes} minutes. Enter it on {clinicName}'s online booking page.\n\n" +
+               "If you didn't ask for this code, you can ignore this email. Nobody from the clinic will ever ask you for it.");
+
     public static string Redacted(string body, string secret) => body.Replace(secret, "[link removed after sending]");
 
     /// <summary>"today at 9:00 AM", "tomorrow at 9:00 AM" or "on Tue, Nov 10 at 9:00 AM".</summary>

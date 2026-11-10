@@ -8,5 +8,6 @@ public enum ResultStatus
     Unauthorized = 4,
     Forbidden = 5,
     Conflict = 6,
-    Error = 7
+    Error = 7,
+    TooManyRequests = 8
 }

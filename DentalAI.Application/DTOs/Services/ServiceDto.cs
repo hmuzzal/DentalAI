@@ -9,4 +9,5 @@ public sealed class ServiceDto
     public decimal Price { get; set; }
     public int DurationMinutes { get; set; }
     public bool IsActive { get; set; }
+    public bool BookableOnline { get; set; }
 }

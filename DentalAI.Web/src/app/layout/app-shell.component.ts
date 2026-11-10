@@ -56,7 +56,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Doctors', path: '/doctors', icon: 'team' },
       { label: 'Services', path: '/services', icon: 'medicine-box' },
       { label: 'Staff', path: '/staff', icon: 'user', roles: ['ClinicAdmin'] },
-      { label: 'Reminders', path: '/settings/notifications', icon: 'notification', roles: ['ClinicAdmin'] }
+      { label: 'Reminders', path: '/settings/notifications', icon: 'notification', roles: ['ClinicAdmin'] },
+      { label: 'Patient portal', path: '/settings/portal', icon: 'global', roles: ['ClinicAdmin'] }
     ]
   },
   {

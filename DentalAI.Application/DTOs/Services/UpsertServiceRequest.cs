@@ -7,4 +7,6 @@ public sealed class UpsertServiceRequest
     public decimal Price { get; set; }
     public int DurationMinutes { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Patients can book it on the clinic's portal.</summary>
+    public bool BookableOnline { get; set; } = true;
 }
