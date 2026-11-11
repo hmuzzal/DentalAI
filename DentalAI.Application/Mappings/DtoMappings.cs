@@ -1,3 +1,4 @@
+using DentalAI.Application.Common.Phone;
 using DentalAI.Application.DTOs.Appointments;
 using DentalAI.Application.DTOs.Clinics;
 using DentalAI.Application.DTOs.Doctors;
@@ -70,6 +71,7 @@ public static class DtoMappings
         LastName = src.LastName,
         FullName = FullName(src.FirstName, src.LastName),
         Phone = src.Phone,
+        PhoneNeedsReview = !PhoneNumberRules.IsStoredCorrectly(src.Phone),
         Email = src.Email,
         DateOfBirth = src.DateOfBirth,
         Gender = src.Gender,

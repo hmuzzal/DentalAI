@@ -11,6 +11,8 @@ public sealed class PatientDto
     public string FullName { get; set; } = string.Empty;
     /// <summary>E.164, e.g. +12125550142 (older records may not be normalised yet).</summary>
     public string Phone { get; set; } = string.Empty;
+    /// <summary>The phone isn't a valid number in E.164 (an old record): texts and portal sign-in by phone won't work until it's fixed.</summary>
+    public bool PhoneNeedsReview { get; set; }
     public string? Email { get; set; }
     public DateOnly? DateOfBirth { get; set; }
     public string? Gender { get; set; }

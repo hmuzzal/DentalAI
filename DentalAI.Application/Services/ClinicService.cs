@@ -1,3 +1,4 @@
+using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Mappings;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
@@ -11,6 +12,7 @@ namespace DentalAI.Application.Services;
 public sealed class ClinicService(
     IClinicRepository clinicRepository,
     IUserRepository userRepository,
+    IStaffAccessCache staffAccess,
     IUnitOfWork unitOfWork) : IClinicService
 {
     public async Task<Result<IReadOnlyList<ClinicDto>>> ListAsync(CancellationToken cancellationToken)
@@ -102,7 +104,8 @@ public sealed class ClinicService(
 
         // Close the clinic and lock out its staff: deactivate every account and end their sessions. (Sign-in also
         // refuses staff of a deleted clinic, so this holds even for accounts added later by mistake.)
-        foreach (var user in await userRepository.ListByClinicAsync(clinic.Id, cancellationToken))
+        var staff = await userRepository.ListByClinicAsync(clinic.Id, cancellationToken);
+        foreach (var user in staff)
         {
             user.IsActive = false;
             user.RefreshToken = null;
@@ -114,6 +117,7 @@ public sealed class ClinicService(
         clinic.IsDeleted = true;
         clinicRepository.Update(clinic);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        foreach (var user in staff) staffAccess.Forget(user.Id);
 
         return Result.Ok("Clinic deleted successfully.");
     }

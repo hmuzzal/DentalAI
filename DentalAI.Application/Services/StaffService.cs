@@ -27,6 +27,7 @@ public sealed class StaffService(
     ICurrentUserService currentUserService,
     IDateTimeProvider dateTimeProvider,
     NotificationService notifications,
+    IStaffAccessCache staffAccess,
     IUnitOfWork unitOfWork)
 {
     public async Task<Result<IReadOnlyList<StaffMemberDto>>> ListAsync(Guid clinicId, CancellationToken cancellationToken)
@@ -118,6 +119,7 @@ public sealed class StaffService(
         RevokeSessions(user);
         userRepository.Update(user);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        staffAccess.Forget(user.Id);
         return Result<StaffMemberDto>.Ok(ToDto(user), $"{user.FirstName} is now {(role == UserRole.ClinicAdmin ? "an admin" : "a receptionist")}.");
     }
 
@@ -142,6 +144,7 @@ public sealed class StaffService(
         user.IsActive = active;
         userRepository.Update(user);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        staffAccess.Forget(user.Id);
         return Result<StaffMemberDto>.Ok(ToDto(user),
             active ? $"{user.FirstName} can sign in again." : $"{user.FirstName} can no longer sign in.");
     }

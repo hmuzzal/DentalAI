@@ -43,6 +43,9 @@ public static class DependencyInjection
 
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddMemoryCache();
+        services.AddSingleton<StaffAccessValidator>();
+        services.AddSingleton<IStaffAccessCache>(sp => sp.GetRequiredService<StaffAccessValidator>());
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<ApplicationDbContextSeeder>();

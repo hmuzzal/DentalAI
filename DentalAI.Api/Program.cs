@@ -11,6 +11,7 @@ using DentalAI.Domain.Enums;
 using DentalAI.Infrastructure;
 using DentalAI.Infrastructure.Configuration;
 using DentalAI.Infrastructure.Persistence;
+using DentalAI.Infrastructure.Security;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -119,10 +120,10 @@ builder.Services
         options.ForwardDefaultSelector = context =>
             AuthSchemes.IsPortalPath(context.Request.Path) ? AuthSchemes.Portal : AuthSchemes.Staff;
     })
-    .AddJwtBearer(AuthSchemes.Staff, options => ConfigureBearer(options, jwtOptions.Audience))
-    .AddJwtBearer(AuthSchemes.Portal, options => ConfigureBearer(options, jwtOptions.PortalAudience));
+    .AddJwtBearer(AuthSchemes.Staff, options => ConfigureBearer(options, jwtOptions.Audience, isStaff: true))
+    .AddJwtBearer(AuthSchemes.Portal, options => ConfigureBearer(options, jwtOptions.PortalAudience, isStaff: false));
 
-void ConfigureBearer(JwtBearerOptions options, string audience)
+void ConfigureBearer(JwtBearerOptions options, string audience, bool isStaff)
 {
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -136,6 +137,16 @@ void ConfigureBearer(JwtBearerOptions options, string audience)
         };
         options.Events = new JwtBearerEvents
         {
+            // Staff tokens: the account must still be active, in a live clinic, with the role in the token, so
+            // deactivating someone or changing their role takes effect now, not when the token expires.
+            // (Patient tokens get the same treatment in PortalService: a disabled portal or deleted patient is a 401.)
+            OnTokenValidated = async context =>
+            {
+                if (!isStaff || context.Principal is null) return;
+                var validator = context.HttpContext.RequestServices.GetRequiredService<StaffAccessValidator>();
+                var reason = await validator.CheckAsync(context.Principal, context.HttpContext.RequestAborted);
+                if (reason is not null) context.Fail(reason);
+            },
             OnAuthenticationFailed = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Auth");
@@ -268,6 +279,7 @@ using (var scope = app.Services.CreateScope())
         var seeder = services.GetRequiredService<ApplicationDbContextSeeder>();
         await seeder.SeedAsync(CancellationToken.None);
         logger.LogInformation("Seed process completed successfully.");
+        await PatientPhoneBackfill.RunAsync(dbContext, logger, CancellationToken.None);
     }
     catch (Exception exception)
     {

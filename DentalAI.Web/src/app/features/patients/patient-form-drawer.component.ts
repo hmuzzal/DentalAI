@@ -132,7 +132,7 @@ type Tab = (typeof TABS)[number];
         <div class="row">
           <nz-form-item>
             <nz-form-label nzRequired nzFor="patient-phone">Phone</nz-form-label>
-            <nz-form-control nzErrorTip="Enter a phone number, e.g. (212) 555-0142." [nzExtra]="phoneHint()">
+            <nz-form-control nzErrorTip="Enter a phone number, e.g. (212) 555-0142." [nzExtra]="patient()?.phoneNeedsReview ? phoneReviewHint : phoneHint()">
               <input nz-input id="patient-phone" type="tel" formControlName="phone" autocomplete="off" />
             </nz-form-control>
           </nz-form-item>
@@ -405,6 +405,7 @@ export class PatientFormDrawerComponent {
   });
 
   /** Which country numbers without +code are read as (the user's clinic's). */
+  readonly phoneReviewHint = "This number, from an older record, isn't valid: texts and portal sign-in by phone won't work. Please correct it.";
   readonly phoneHint = computed(() => phoneCountryHint(this.auth.user()?.clinicCountry));
 
   private readonly stateText = signal('');

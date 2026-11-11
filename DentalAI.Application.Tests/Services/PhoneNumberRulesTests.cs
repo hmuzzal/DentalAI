@@ -30,6 +30,18 @@ public sealed class PhoneNumberRulesTests
         Assert.False(PhoneNumberRules.TryNormalize(input, region, out _));
     }
 
+    [Theory]
+    [InlineData("+12125550142", true)]
+    [InlineData("+8801711000101", true)]
+    [InlineData("(212) 555-0142", false)]  // old format
+    [InlineData("+1-555-0101", false)]     // not a real number
+    [InlineData("+15550100100", false)]    // E.164 shape, but 555 is no area code
+    [InlineData("", false)]
+    public void IsStoredCorrectly_OnlyForValidE164(string phone, bool expected)
+    {
+        Assert.Equal(expected, PhoneNumberRules.IsStoredCorrectly(phone));
+    }
+
     [Fact]
     public void Countries_ListTheUnitedStatesFirst()
     {

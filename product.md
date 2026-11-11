@@ -83,7 +83,7 @@ appointments, doctors, services or schedules:
 | 2 | Billing, invoices and payments (provider-independent core; online payments via the clinic's own Stripe) | 🟡 2a and 2b done 2026-11-02; 2c online payments deferred (needs a Stripe account) |
 | 3 | Email and SMS reminders (SMTP / Twilio, outbox and background worker) | ✅ Done 2026-11-05 (delivery needs provider credentials) |
 | 4 | Reports and analytics | ✅ Done 2026-11-07 (practice report, receivables aging, CSV) |
-| 5 | Patient portal (self-booking) | 🟡 In progress (planned 2026-11-08) |
+| 5 | Patient portal (self-booking) | ✅ Done 2026-11-08 (code sign-in, booking, invoices) |
 | 6 | AI receptionist: chat (Claude, tool use against the scheduling API) | ⬜ |
 | 7 | Voice AI receptionist (telephony + speech) | ⬜ |
 | 8 | Mobile app | ⬜ |
@@ -172,9 +172,13 @@ appointments, doctors, services or schedules:
 - [x] Angular initial bundle was 1.73 MB, over the 1.5 MB budget. ✅ Done 2026-11-11: now 1.22 MB (239 kB transferred).
   Global styles import only the ng-zorro components in use (`src/ng-zorro.less`; add a line there when using a new
   component), and the booking drawer is `@defer`-loaded instead of bundled into the app shell.
-- [ ] Migration `20260622093000_BackfillClinicTimeZone` has no `.Designer.cs`, so EF never runs it.
-- [ ] Phones saved before 2026-11-01 are not E.164 (e.g. the demo clinic's `+1-555-0101`). They are normalised the
+- [x] Migration `20260622093000_BackfillClinicTimeZone` had no `.Designer.cs`, so EF never ran it. ✅ Deleted 2026-11-12: its SQL
+  is identical to the `AlignLegacyClinicSchemaAsync` startup patch, which already adds `Clinics.TimeZone` where missing.
+- [x] Phones saved before 2026-11-01 are not E.164 (e.g. the demo clinic's `+1-555-0101`). They are normalised the
   next time each record is saved; before SMS (Phase 3) add a one-off backfill that normalises them or flags the ones that fail.
+  ✅ Done 2026-11-12: `PatientPhoneBackfill` runs at startup and converts them in each clinic's country (portal sign-in by
+  phone matches E.164 only). Unreadable numbers are left as they are, logged, and shown to staff as "Check phone"
+  (`PatientDto.PhoneNeedsReview`).
 - [ ] **Support access** for platform admins: time-limited, approved by the clinic, every read and change written to an
   audit log. Needed before onboarding real clinics (platform admins currently have no way to help with clinic data).
 - [x] **Staff accounts and invites** (2026-11-02). No self sign-up (`POST /auth/register` removed). People join only
@@ -189,9 +193,12 @@ appointments, doctors, services or schedules:
     `/auth/me` also refuse staff of a deleted clinic.
 - [x] **Invite emails** ✅ 2026-11-05 (Phase 3): invites and new links are emailed; the logged copy drops the link once sent. Still open: "Forgot password",
   which can reuse the invite-token mechanism.
-- [ ] Access tokens stay valid until they expire (60 minutes) after someone is deactivated or their clinic is deleted.
+- [x] Access tokens stay valid until they expire (60 minutes) after someone is deactivated or their clinic is deleted.
   The next page load ends the session (`/auth/me` returns 401), but API calls with the old token work until expiry.
   If that window matters, check the user's status per request (cached) or shorten the token lifetime.
+  ✅ Done 2026-11-12: every staff request checks the account is active, its clinic exists and the role and clinic match
+  the token (`StaffAccessValidator`, cached 30 s). Deactivating, changing a role or deleting a clinic clears the cache, so
+  the old token gets 401 at once. With several API servers, other servers notice within 30 s.
 - [ ] Week start is fixed to Sunday (US). Make it a clinic setting for the Bangladesh phase (Saturday).
 - [ ] i18n: only the clinic form is marked up (`i18n` / `$localize`); the Doctors, Patients and Services screens are not yet. Run `pnpm extract-i18n` to update
   `src/locale/messages.xlf`; mark other screens as they are touched.

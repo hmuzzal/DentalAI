@@ -9,6 +9,7 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzPopconfirmModule } from 'ng-zorro-antd/popconfirm';
 import { NzTableModule } from 'ng-zorro-antd/table';
+import { NzTagModule } from 'ng-zorro-antd/tag';
 import { catchError, debounceTime, distinctUntilChanged, finalize, map, of, Subject, switchMap, tap } from 'rxjs';
 import { PagedResult } from '../../core/models/api-response.model';
 import { Patient } from '../../core/models/patient.models';
@@ -34,7 +35,7 @@ interface Query {
   standalone: true,
   imports: [
     DateOnlyPipe, FormsModule, RouterLink, NzButtonModule, NzCardModule, NzIconModule, NzInputModule, NzPopconfirmModule,
-    NzTableModule, PageHeaderComponent, PageStateComponent, PhonePipe, PatientFormDrawerComponent
+    NzTableModule, NzTagModule, PageHeaderComponent, PageStateComponent, PhonePipe, PatientFormDrawerComponent
   ],
   template: `
     <section class="da-page">
@@ -77,7 +78,12 @@ interface Query {
                     <strong>{{ patient.fullName }}</strong>
                     @if (patient.gender) { <div class="muted">{{ patient.gender }}</div> }
                   </td>
-                  <td class="nowrap">{{ (patient.phone | phone) || '—' }}</td>
+                  <td class="nowrap">
+                    {{ (patient.phone | phone) || '—' }}
+                    @if (patient.phoneNeedsReview) {
+                      <div><nz-tag nzColor="warning" title="Not a valid number: texts and portal sign-in by phone won't work. Edit the patient to fix it.">Check phone</nz-tag></div>
+                    }
+                  </td>
                   <td>{{ patient.email || '—' }}</td>
                   <td class="nowrap num">{{ patient.dateOfBirth ? (patient.dateOfBirth | dateOnly: 'MM/dd/yyyy') : '—' }}</td>
                   <td nzAlign="right" class="nowrap">

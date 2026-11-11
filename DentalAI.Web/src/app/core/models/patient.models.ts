@@ -35,6 +35,8 @@ export interface Patient {
   fullName: string;
   /** E.164, e.g. +12125550142 (older records may not be normalised yet). */
   phone: string;
+  /** Not a valid stored number (an old record): texts and portal sign-in by phone won't work. */
+  phoneNeedsReview?: boolean;
   email?: string | null;
   /** yyyy-MM-dd */
   dateOfBirth?: string | null;

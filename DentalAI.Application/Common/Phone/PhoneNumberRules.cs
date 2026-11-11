@@ -36,6 +36,10 @@ public static class PhoneNumberRules
         }
     }
 
+    /// <summary>True when <paramref name="phone"/> is a valid number stored in E.164, the format SMS and portal sign-in need.</summary>
+    public static bool IsStoredCorrectly(string? phone) =>
+        phone is { Length: > 0 } && phone[0] == '+' && TryNormalize(phone, DefaultRegion, out var e164) && e164 == phone;
+
     /// <summary>For messages: US/Canada numbers as (212) 555-0142, others in international format; unparseable as is.</summary>
     public static string Display(string phone)
     {

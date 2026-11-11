@@ -131,8 +131,12 @@ public sealed class StaffInviteTests(ApiFactory factory)
         var email = NewEmail();
         var invite = await InviteAsync(admin, "/api/staff/invite", email, "Receptionist");
         var session = await SchedulingApi.ReadAsync<SessionDto>(await AcceptAsync(invite.InviteToken, GoodPassword));
+        Assert.Equal(HttpStatusCode.OK, (await Bearer(session.AccessToken).GetAsync("/api/patients")).StatusCode);
 
         await admin.Http.PutAsJsonAsync($"/api/staff/{invite.Member.Id}/role", new { role = "ClinicAdmin" }, SchedulingApi.Json);
+
+        // The old access token (still a receptionist's) stops working at once, not when it expires.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Bearer(session.AccessToken).GetAsync("/api/patients")).StatusCode);
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await RefreshAsync(session.RefreshToken)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, GoodPassword)).StatusCode);
@@ -146,7 +150,9 @@ public sealed class StaffInviteTests(ApiFactory factory)
         var invite = await InviteAsync(admin, "/api/staff/invite", email, "Receptionist");
         var session = await SchedulingApi.ReadAsync<SessionDto>(await AcceptAsync(invite.InviteToken, GoodPassword));
 
+        Assert.Equal(HttpStatusCode.OK, (await Bearer(session.AccessToken).GetAsync("/api/patients")).StatusCode);
         await admin.Http.PostAsync($"/api/staff/{invite.Member.Id}/deactivate", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Bearer(session.AccessToken).GetAsync("/api/patients")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(email, GoodPassword)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await RefreshAsync(session.RefreshToken)).StatusCode);
 
@@ -183,6 +189,8 @@ public sealed class StaffInviteTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(adminEmail, GoodPassword)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await RefreshAsync(session.RefreshToken)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await admin.Http.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await admin.Http.GetAsync("/api/patients")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Bearer(session.AccessToken).GetAsync("/api/patients")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await AcceptAsync(pending.InviteToken, GoodPassword)).StatusCode);
     }
 
@@ -191,6 +199,13 @@ public sealed class StaffInviteTests(ApiFactory factory)
     private static string NewEmail() => $"staff.{Guid.NewGuid():N}@test.local";
 
     private HttpClient Anonymous() => factory.CreateClient();
+
+    private HttpClient Bearer(string accessToken)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        return client;
+    }
 
     private Task<SchedulingApi> PlatformAdminAsync() =>
         SchedulingApi.SignInAsync(factory, "superadmin@dentalai.local", "SuperAdmin123!");
