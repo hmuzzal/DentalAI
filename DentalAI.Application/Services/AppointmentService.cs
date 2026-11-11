@@ -1,4 +1,4 @@
-using AutoMapper;
+using DentalAI.Application.Mappings;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
@@ -19,14 +19,13 @@ public sealed class AppointmentService(
     ICurrentUserService currentUserService,
     IUnitOfWork unitOfWork,
     IDateTimeProvider dateTimeProvider,
-    NotificationService notifications,
-    IMapper mapper) : IAppointmentService
+    NotificationService notifications) : IAppointmentService
 {
     public async Task<Result<IReadOnlyList<AppointmentDto>>> ListAsync(CancellationToken cancellationToken)
     {
         var clinicId = currentUserService.ClinicId;
         var appointments = await appointmentRepository.ListAsync(clinicId, cancellationToken);
-        return Result<IReadOnlyList<AppointmentDto>>.Ok(mapper.Map<IReadOnlyList<AppointmentDto>>(appointments));
+        return Result<IReadOnlyList<AppointmentDto>>.Ok(appointments.Select(x => x.ToDto()).ToList());
     }
 
     public async Task<Result<AppointmentDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
@@ -34,7 +33,7 @@ public sealed class AppointmentService(
         var appointment = await appointmentRepository.GetByIdAsync(id, cancellationToken);
         return appointment is null
             ? Result<AppointmentDto>.Fail(ResultStatus.NotFound, "Appointment was not found.")
-            : Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment));
+            : Result<AppointmentDto>.Ok(appointment.ToDto());
     }
 
     public Task<Result<AppointmentDto>> CreateAppointmentAsync(CreateAppointmentRequest request, CancellationToken cancellationToken) =>
@@ -94,7 +93,7 @@ public sealed class AppointmentService(
             await appointmentRepository.AddAsync(appointment, ct);
             await unitOfWork.SaveChangesAsync(ct);
 
-            return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment created successfully.");
+            return Result<AppointmentDto>.Ok(appointment.ToDto(), "Appointment created successfully.");
         }, cancellationToken);
 
         // After the booking is committed (and outside the lock): a notification problem can't undo it.
@@ -144,7 +143,7 @@ public sealed class AppointmentService(
             }
 
             await unitOfWork.SaveChangesAsync(ct);
-            return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment rescheduled successfully.");
+            return Result<AppointmentDto>.Ok(appointment.ToDto(), "Appointment rescheduled successfully.");
         }, cancellationToken);
 
         if (moved.Success) await notifications.QueueAppointmentAsync(appointment.Id, MessageKind.Rescheduled, cancellationToken);
@@ -193,7 +192,7 @@ public sealed class AppointmentService(
         if (newStatus == AppointmentStatus.Cancelled)
             await notifications.QueueAppointmentAsync(appointment.Id, MessageKind.Cancelled, cancellationToken);
 
-        return Result<AppointmentDto>.Ok(mapper.Map<AppointmentDto>(appointment), "Appointment status updated successfully.");
+        return Result<AppointmentDto>.Ok(appointment.ToDto(), "Appointment status updated successfully.");
     }
 
     private static string? ValidateStatusTransition(AppointmentStatus currentStatus, AppointmentStatus nextStatus)

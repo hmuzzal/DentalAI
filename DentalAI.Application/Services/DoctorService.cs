@@ -1,4 +1,4 @@
-using AutoMapper;
+using DentalAI.Application.Mappings;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
@@ -15,14 +15,13 @@ public sealed class DoctorService(
     IAppointmentRepository appointmentRepository,
     IDateTimeProvider dateTimeProvider,
     ICurrentUserService currentUserService,
-    IUnitOfWork unitOfWork,
-    IMapper mapper) : IDoctorService
+    IUnitOfWork unitOfWork) : IDoctorService
 {
     public async Task<Result<IReadOnlyList<DoctorDto>>> ListAsync(CancellationToken cancellationToken)
     {
         var effectiveClinicId = OwnClinicId;
         var doctors = await doctorRepository.ListAsync(effectiveClinicId, cancellationToken);
-        return Result<IReadOnlyList<DoctorDto>>.Ok(mapper.Map<IReadOnlyList<DoctorDto>>(doctors));
+        return Result<IReadOnlyList<DoctorDto>>.Ok(doctors.Select(x => x.ToDto()).ToList());
     }
 
     public async Task<Result<DoctorDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
@@ -30,7 +29,7 @@ public sealed class DoctorService(
         var doctor = await doctorRepository.GetByIdAsync(id, cancellationToken);
         return doctor is null
             ? Result<DoctorDto>.Fail(ResultStatus.NotFound, "Doctor was not found.")
-            : Result<DoctorDto>.Ok(mapper.Map<DoctorDto>(doctor));
+            : Result<DoctorDto>.Ok(doctor.ToDto());
     }
 
     public async Task<Result<DoctorDto>> CreateAsync(CreateDoctorDto request, CancellationToken cancellationToken)
@@ -65,7 +64,7 @@ public sealed class DoctorService(
         await doctorRepository.AddAsync(doctor, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<DoctorDto>.Ok(mapper.Map<DoctorDto>(doctor), "Doctor created successfully.");
+        return Result<DoctorDto>.Ok(doctor.ToDto(), "Doctor created successfully.");
     }
 
     public async Task<Result<DoctorDto>> UpdateAsync(Guid id, UpdateDoctorDto request, CancellationToken cancellationToken)
@@ -103,7 +102,7 @@ public sealed class DoctorService(
         doctorRepository.Update(doctor);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<DoctorDto>.Ok(mapper.Map<DoctorDto>(doctor), "Doctor updated successfully.");
+        return Result<DoctorDto>.Ok(doctor.ToDto(), "Doctor updated successfully.");
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)

@@ -181,7 +181,10 @@ const MOBILE_QUERY = '(max-width: 991.98px)';
       </nz-layout>
     </nz-layout>
 
-    @if (isClinicStaff()) { <app-booking-drawer /> }
+    @if (isClinicStaff()) {
+      <!-- Loaded the first time it opens (fetched early when the browser is idle), keeping it out of the first download. -->
+      @defer (when booking.isOpen(); prefetch on idle) { <app-booking-drawer /> }
+    }
   `,
   styles: [`
     :host { display: block; }

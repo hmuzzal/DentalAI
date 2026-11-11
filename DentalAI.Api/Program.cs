@@ -103,6 +103,7 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+ValidateSigningKey(jwtOptions.SecretKey, builder.Environment);
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SecretKey));
 if (string.Equals(jwtOptions.Audience, jwtOptions.PortalAudience, StringComparison.Ordinal))
 {
@@ -1034,6 +1035,34 @@ static async Task EnsureColumnNullableAsync(
     await using var alterCommand = connection.CreateCommand();
     alterCommand.CommandText = $"ALTER TABLE [dbo].[{tableName}] ALTER COLUMN [{columnName}] uniqueidentifier NULL";
     await alterCommand.ExecuteNonQueryAsync(cancellationToken);
+}
+
+// The token signing key comes from the environment (Jwt__SecretKey) or a secret store, never from appsettings.json.
+// Anyone with the key can mint staff and patient tokens, so refuse to start with a weak or published one.
+static void ValidateSigningKey(string key, IHostEnvironment environment)
+{
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        throw new InvalidOperationException(
+            "Jwt:SecretKey is not set. Set the Jwt__SecretKey environment variable (or a secret store) to a random value of at least 32 bytes, e.g. from `openssl rand -base64 48`.");
+    }
+
+    if (Encoding.UTF8.GetByteCount(key) < 32)
+    {
+        throw new InvalidOperationException("Jwt:SecretKey must be at least 32 bytes (256 bits) long.");
+    }
+
+    // Keys that are, or were, committed to the repository.
+    string[] publishedKeys =
+    [
+        "DentalAI_Super_Long_Development_Key_Change_For_Production_2026",
+        "DentalAI-local-development-signing-key-not-for-production"
+    ];
+    if (!environment.IsDevelopment() && publishedKeys.Contains(key, StringComparer.Ordinal))
+    {
+        throw new InvalidOperationException(
+            $"Jwt:SecretKey is a published development key and cannot be used in the {environment.EnvironmentName} environment. Set Jwt__SecretKey to a new random value.");
+    }
 }
 
 /// <summary>Exposed so integration tests can host the API with WebApplicationFactory&lt;Program&gt;.</summary>

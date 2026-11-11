@@ -1,4 +1,4 @@
-using AutoMapper;
+using DentalAI.Application.Mappings;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
@@ -15,14 +15,13 @@ public sealed class PatientService(
     IClinicRepository clinicRepository,
     ICurrentUserService currentUserService,
     IDateTimeProvider dateTimeProvider,
-    IUnitOfWork unitOfWork,
-    IMapper mapper) : IPatientService
+    IUnitOfWork unitOfWork) : IPatientService
 {
     public async Task<Result<IReadOnlyList<PatientDto>>> ListAsync(CancellationToken cancellationToken)
     {
         var effectiveClinicId = OwnClinicId;
         var patients = await patientRepository.ListAsync(effectiveClinicId, cancellationToken);
-        return Result<IReadOnlyList<PatientDto>>.Ok(mapper.Map<IReadOnlyList<PatientDto>>(patients));
+        return Result<IReadOnlyList<PatientDto>>.Ok(patients.Select(x => x.ToDto()).ToList());
     }
 
     public async Task<Result<PagedResult<PatientDto>>> SearchAsync(PatientSearchQuery query, CancellationToken cancellationToken)
@@ -33,7 +32,7 @@ public sealed class PatientService(
             OwnClinicId, query.Search, page, pageSize, cancellationToken);
 
         return Result<PagedResult<PatientDto>>.Ok(
-            new PagedResult<PatientDto>(mapper.Map<IReadOnlyList<PatientDto>>(items), total, page, pageSize));
+            new PagedResult<PatientDto>(items.Select(x => x.ToDto()).ToList(), total, page, pageSize));
     }
 
     /// <summary>The full record, including insurance.</summary>
@@ -42,7 +41,7 @@ public sealed class PatientService(
         var patient = await patientRepository.GetByIdAsync(id, cancellationToken);
         return patient is null
             ? Result<PatientDto>.Fail(ResultStatus.NotFound, "Patient was not found.")
-            : Result<PatientDto>.Ok(mapper.Map<PatientDto>(patient));
+            : Result<PatientDto>.Ok(patient.ToDto());
     }
 
     public async Task<Result<PatientDto>> CreateAsync(UpsertPatientRequest request, CancellationToken cancellationToken)
@@ -71,7 +70,7 @@ public sealed class PatientService(
         await patientRepository.AddAsync(patient, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<PatientDto>.Ok(mapper.Map<PatientDto>(patient), "Patient created successfully.");
+        return Result<PatientDto>.Ok(patient.ToDto(), "Patient created successfully.");
     }
 
     public async Task<Result<PatientDto>> UpdateAsync(Guid id, UpsertPatientRequest request, CancellationToken cancellationToken)
@@ -107,7 +106,7 @@ public sealed class PatientService(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<PatientDto>.Ok(mapper.Map<PatientDto>(patient), "Patient updated successfully.");
+        return Result<PatientDto>.Ok(patient.ToDto(), "Patient updated successfully.");
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)

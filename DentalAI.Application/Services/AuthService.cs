@@ -1,4 +1,4 @@
-using AutoMapper;
+using DentalAI.Application.Mappings;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
@@ -19,8 +19,7 @@ public sealed class AuthService(
     IJwtTokenGenerator jwtTokenGenerator,
     IRefreshTokenService refreshTokenService,
     ICurrentUserService currentUserService,
-    IDateTimeProvider dateTimeProvider,
-    IMapper mapper) : IAuthService
+    IDateTimeProvider dateTimeProvider) : IAuthService
 {
     public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
@@ -101,7 +100,7 @@ public sealed class AuthService(
                 user.IsActive ? ClinicClosedMessage : "Your account has been deactivated.");
         }
 
-        return Result<UserProfileDto>.Ok(mapper.Map<UserProfileDto>(user));
+        return Result<UserProfileDto>.Ok(user.ToDto());
     }
 
     /// <summary>Who an invite link is for. Unknown, used and expired links all get the same answer.</summary>
@@ -159,7 +158,7 @@ public sealed class AuthService(
         AccessToken = jwtTokenGenerator.GenerateAccessToken(user),
         RefreshToken = user.RefreshToken ?? string.Empty,
         ExpiresAtUtc = jwtTokenGenerator.GetAccessTokenExpiryUtc(),
-        User = mapper.Map<UserProfileDto>(user)
+        User = user.ToDto()
     };
 
     private void SetRefreshToken(User user)

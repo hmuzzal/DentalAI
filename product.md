@@ -50,7 +50,7 @@ appointments, doctors, services or schedules:
 ## 4. Tech stack
 
 - **API:** ASP.NET Core (.NET 10), Clean Architecture (Domain / Application /
-  Infrastructure / Api), EF Core + SQL Server, FluentValidation, AutoMapper, JWT + refresh
+  Infrastructure / Api), EF Core + SQL Server, FluentValidation, hand-written DTO mappings, JWT + refresh
   tokens, Serilog, Swagger.
 - **Web:** Angular 20 (standalone components, signals), ng-zorro-antd, date-fns.
 - **Tests:** xUnit (Application layer). Angular uses Karma/Jasmine; no specs yet.
@@ -153,10 +153,13 @@ appointments, doctors, services or schedules:
    applies, so it threw "Nullable object must have a value" for users without a clinic.
 
 ### Technical debt / known issues (noted 2026-11-01, open until fixed)
-- [ ] **Security: vulnerable packages.** AutoMapper 13.0.1 (high, GHSA-rvv3-g6hj-g44x) and
-  System.Security.Cryptography.Pkcs 9.0.4 (high GHSA-846f-f764-76mx, moderate GHSA-2fmv-rv2c-59x7). Upgrade.
-- [ ] **Security: JWT secret in `appsettings.json`.** Move it to user-secrets (dev) and
-  environment variables or a key vault (prod), then rotate the key.
+- [x] **Security: vulnerable packages.** AutoMapper 13.0.1 (high, GHSA-rvv3-g6hj-g44x) and
+  System.Security.Cryptography.Pkcs 9.0.4 (high GHSA-846f-f764-76mx, moderate GHSA-2fmv-rv2c-59x7). ✅ Done 2026-11-11:
+  Pkcs now resolves to 10.0.13 (via the MailKit upgrade); AutoMapper removed (fixed versions need a paid licence) and
+  replaced by `Application/Mappings/DtoMappings.cs`. `dotnet list package --vulnerable` is clean.
+- [x] **Security: JWT secret in `appsettings.json`.** ✅ Done 2026-11-11: removed from `appsettings.json`; local dev uses a
+  key in `appsettings.Development.json`, tests set their own. Startup refuses a missing key, one under 32 bytes, or (outside
+  Development) any key ever committed to the repo. **Deploy:** set `Jwt__SecretKey` (env var or key vault) to a new random value.
 - [ ] **`Program.cs` is ~980 lines of one-off DB patches.** The startup `AlignLegacy*Schema`
   raw-SQL methods should become migrations, or be deleted once all databases are migrated.
   2026-11-01: a fresh database could not be created at all (AddSchedulingEngine indexed a column the patches create
@@ -166,8 +169,9 @@ appointments, doctors, services or schedules:
   QUOTED_IDENTIFIER ON for writes (SqlClient default; use `sqlcmd -I`).- [x] **Build/cache folders in git.** `.dotnet-cli`, `.pnpm-store`, `.nuget`, `.buildtmp`,
   `.appdata` and `.vs` show up in git. Add them to `.gitignore` and untrack them. ✅ Done 2026-11-01.
 - [ ] No Angular unit tests. (API integration tests exist since 2026-11-01.)
-- [ ] Angular initial bundle is 1.70 MB, over the 1.5 MB budget (build warning). Likely ng-zorro and the chart
-  library on first load; lazy-load or trim imports.
+- [x] Angular initial bundle was 1.73 MB, over the 1.5 MB budget. ✅ Done 2026-11-11: now 1.22 MB (239 kB transferred).
+  Global styles import only the ng-zorro components in use (`src/ng-zorro.less`; add a line there when using a new
+  component), and the booking drawer is `@defer`-loaded instead of bundled into the app shell.
 - [ ] Migration `20260622093000_BackfillClinicTimeZone` has no `.Designer.cs`, so EF never runs it.
 - [ ] Phones saved before 2026-11-01 are not E.164 (e.g. the demo clinic's `+1-555-0101`). They are normalised the
   next time each record is saved; before SMS (Phase 3) add a one-off backfill that normalises them or flags the ones that fail.

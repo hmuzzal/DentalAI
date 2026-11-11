@@ -1,4 +1,4 @@
-using AutoMapper;
+using DentalAI.Application.Mappings;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
 using DentalAI.Application.Common.Phone;
@@ -11,13 +11,12 @@ namespace DentalAI.Application.Services;
 public sealed class ClinicService(
     IClinicRepository clinicRepository,
     IUserRepository userRepository,
-    IUnitOfWork unitOfWork,
-    IMapper mapper) : IClinicService
+    IUnitOfWork unitOfWork) : IClinicService
 {
     public async Task<Result<IReadOnlyList<ClinicDto>>> ListAsync(CancellationToken cancellationToken)
     {
         var clinics = await clinicRepository.ListAsync(cancellationToken);
-        return Result<IReadOnlyList<ClinicDto>>.Ok(mapper.Map<IReadOnlyList<ClinicDto>>(clinics));
+        return Result<IReadOnlyList<ClinicDto>>.Ok(clinics.Select(x => x.ToDto()).ToList());
     }
 
     public async Task<Result<ClinicDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
@@ -25,7 +24,7 @@ public sealed class ClinicService(
         var clinic = await clinicRepository.GetByIdAsync(id, cancellationToken);
         return clinic is null
             ? Result<ClinicDto>.Fail(ResultStatus.NotFound, "Clinic was not found.")
-            : Result<ClinicDto>.Ok(mapper.Map<ClinicDto>(clinic));
+            : Result<ClinicDto>.Ok(clinic.ToDto());
     }
 
     public async Task<Result<ClinicDto>> CreateAsync(CreateClinicDto request, CancellationToken cancellationToken)
@@ -56,7 +55,7 @@ public sealed class ClinicService(
         await clinicRepository.AddAsync(clinic, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<ClinicDto>.Ok(mapper.Map<ClinicDto>(clinic), "Clinic created successfully.");
+        return Result<ClinicDto>.Ok(clinic.ToDto(), "Clinic created successfully.");
     }
 
     public async Task<Result<ClinicDto>> UpdateAsync(Guid id, UpdateClinicDto request, CancellationToken cancellationToken)
@@ -90,7 +89,7 @@ public sealed class ClinicService(
         clinicRepository.Update(clinic);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<ClinicDto>.Ok(mapper.Map<ClinicDto>(clinic), "Clinic updated successfully.");
+        return Result<ClinicDto>.Ok(clinic.ToDto(), "Clinic updated successfully.");
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)

@@ -33,6 +33,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:DefaultConnection", ConnectionString(_databaseName));
         // The tests run the reminder and sending jobs themselves, at chosen times.
+        builder.UseSetting("Jwt:SecretKey", "DentalAI-integration-tests-signing-key-0123456789");
         builder.UseSetting("Notifications:BackgroundJobsEnabled", "false");
         // Every test client shares one address; the per-IP sign-in limit is tested separately.
         builder.UseSetting("Portal:SignInRequestsPerMinute", "100000");

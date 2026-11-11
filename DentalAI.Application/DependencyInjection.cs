@@ -1,5 +1,4 @@
 using DentalAI.Application.Interfaces;
-using DentalAI.Application.Mappings;
 using DentalAI.Application.Services;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,7 +9,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddAutoMapper(typeof(ApplicationMappingProfile).Assembly);
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         services.AddScoped<IAuthService, AuthService>();

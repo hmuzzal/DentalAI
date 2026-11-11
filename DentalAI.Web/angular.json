@@ -38,6 +38,7 @@
               }
             ],
             "styles": [
+              "src/ng-zorro.less",
               "src/styles.scss"
             ]
           },
@@ -97,6 +98,7 @@
               }
             ],
             "styles": [
+              "src/ng-zorro.less",
               "src/styles.scss"
             ]
           }

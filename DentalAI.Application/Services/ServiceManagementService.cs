@@ -1,4 +1,4 @@
-using AutoMapper;
+using DentalAI.Application.Mappings;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
@@ -11,13 +11,12 @@ public sealed class ServiceManagementService(
     IServiceRepository serviceRepository,
     IClinicRepository clinicRepository,
     ICurrentUserService currentUserService,
-    IUnitOfWork unitOfWork,
-    IMapper mapper) : IServiceManagementService
+    IUnitOfWork unitOfWork) : IServiceManagementService
 {
     public async Task<Result<IReadOnlyList<ServiceDto>>> ListAsync(CancellationToken cancellationToken)
     {
         var services = await serviceRepository.ListAsync(cancellationToken);
-        return Result<IReadOnlyList<ServiceDto>>.Ok(mapper.Map<IReadOnlyList<ServiceDto>>(services));
+        return Result<IReadOnlyList<ServiceDto>>.Ok(services.Select(x => x.ToDto()).ToList());
     }
 
     public async Task<Result<ServiceDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
@@ -25,7 +24,7 @@ public sealed class ServiceManagementService(
         var service = await serviceRepository.GetByIdAsync(id, cancellationToken);
         return service is null
             ? Result<ServiceDto>.Fail(ResultStatus.NotFound, "Service was not found.")
-            : Result<ServiceDto>.Ok(mapper.Map<ServiceDto>(service));
+            : Result<ServiceDto>.Ok(service.ToDto());
     }
 
     public async Task<Result<ServiceDto>> CreateAsync(UpsertServiceRequest request, CancellationToken cancellationToken)
@@ -55,7 +54,7 @@ public sealed class ServiceManagementService(
         await serviceRepository.AddAsync(service, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<ServiceDto>.Ok(mapper.Map<ServiceDto>(service), "Service created successfully.");
+        return Result<ServiceDto>.Ok(service.ToDto(), "Service created successfully.");
     }
 
     public async Task<Result<ServiceDto>> UpdateAsync(Guid id, UpsertServiceRequest request, CancellationToken cancellationToken)
@@ -76,7 +75,7 @@ public sealed class ServiceManagementService(
         serviceRepository.Update(service);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<ServiceDto>.Ok(mapper.Map<ServiceDto>(service), "Service updated successfully.");
+        return Result<ServiceDto>.Ok(service.ToDto(), "Service updated successfully.");
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
