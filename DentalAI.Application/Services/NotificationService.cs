@@ -2,6 +2,7 @@ using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
 using DentalAI.Application.Common.Notifications;
+using DentalAI.Application.Common.People;
 using DentalAI.Application.Common.Phone;
 using DentalAI.Application.DTOs.Notifications;
 using DentalAI.Domain.Entities;
@@ -125,7 +126,7 @@ public sealed class NotificationService(
             string.IsNullOrWhiteSpace(data.Clinic.Phone) ? null : PhoneNumberRules.Display(data.Clinic.Phone),
             string.IsNullOrWhiteSpace(data.Clinic.Address) ? null : data.Clinic.Address,
             data.Patient.FirstName,
-            $"Dr. {data.Doctor.LastName}".Trim(),
+            DoctorNames.WithTitle(data.Doctor.LastName) is { Length: > 0 } doctorName ? doctorName : "your dentist",
             data.Service.Name,
             TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(data.Appointment.StartTime, DateTimeKind.Utc), zone),
             TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(now, DateTimeKind.Utc), zone));

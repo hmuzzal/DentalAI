@@ -225,3 +225,8 @@ public sealed class UpdatePortalSettingsRequest
     public int CancelCutoffHours { get; set; } = 24;
     public int MaxUpcomingAppointments { get; set; } = 3;
 }
+
+/// <summary>A booking, move or cancellation that would go through, for the patient to confirm. Times are UTC.</summary>
+/// <param name="StartTimeUtc">The visit's time (for a move, its current time).</param>
+/// <param name="NewStartTimeUtc">For a move only: the new time.</param>
+public sealed record PortalChangePreviewDto(string ServiceName, string DoctorName, DateTime StartTimeUtc, DateTime? NewStartTimeUtc);

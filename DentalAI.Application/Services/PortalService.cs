@@ -2,6 +2,7 @@ using System.Net.Mail;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
 using DentalAI.Application.Common.Models;
+using DentalAI.Application.Common.People;
 using DentalAI.Application.Common.Phone;
 using DentalAI.Application.Common.Portal;
 using DentalAI.Application.Common.Security;
@@ -348,18 +349,10 @@ public sealed class PortalService(
     public Task<Result<PortalAppointmentDto>> BookAsync(PortalBookRequest request, CancellationToken cancellationToken) =>
         AsPatientAsync(async context =>
         {
-            var service = await services.GetByIdAsync(request.ServiceId, cancellationToken);
-            if (service is not { IsActive: true, BookableOnline: true })
-                return Result<PortalAppointmentDto>.Fail(ResultStatus.NotFound, "This service can't be booked online.");
-
+            var check = await CheckBookingAsync(request, context, cancellationToken);
+            if (!check.Success) return Result<PortalAppointmentDto>.Fail(check.Status, check.Message);
+            var service = check.Data!;
             var start = AsUtc(request.StartTime);
-            if (CheckWindow(start, context) is { } windowError)
-                return Result<PortalAppointmentDto>.Fail(ResultStatus.ValidationError, windowError);
-
-            var limit = context.Settings.MaxUpcomingAppointments;
-            if (await portal.CountUpcomingAsync(context.Patient.Id, clock.UtcNow, cancellationToken) >= limit)
-                return Result<PortalAppointmentDto>.Fail(ResultStatus.Conflict,
-                    $"You already have {limit} upcoming appointment{(limit == 1 ? "" : "s")}, the most you can book online.{CallClinic(context.Clinic)}");
 
             var note = Optional(request.Note);
             var created = await appointments.CreateAppointmentAsync(new CreateAppointmentRequest
@@ -414,6 +407,88 @@ public sealed class PortalService(
                     "Your appointment has been cancelled.")
                 : Result<PortalAppointmentDto>.Fail(cancelled.Status, cancelled.Message, cancelled.Errors);
         }, cancellationToken);
+
+    // ---- Signed-in patient: checking a change before making it ----
+    // The assistant asks the patient to confirm a change before making it. These run every rule the change itself will,
+    // plus whether the time is still open, and save nothing, so the patient is only asked about a change that can go through.
+
+    public Task<Result<PortalChangePreviewDto>> PreviewBookingAsync(PortalBookRequest request, CancellationToken cancellationToken) =>
+        AsPatientAsync(async context =>
+        {
+            var check = await CheckBookingAsync(request, context, cancellationToken);
+            if (!check.Success) return Result<PortalChangePreviewDto>.Fail(check.Status, check.Message);
+
+            var doctor = (await doctors.ListAsync(context.Clinic.Id, cancellationToken)).FirstOrDefault(d => d.Id == request.DoctorId);
+            if (doctor is null) return Result<PortalChangePreviewDto>.Fail(ResultStatus.NotFound, "This dentist was not found.");
+
+            var start = AsUtc(request.StartTime);
+            if (await CheckOpenAsync(doctor.Id, check.Data!.Id, start, null, context, cancellationToken) is { } notOpen)
+                return Result<PortalChangePreviewDto>.Fail(ResultStatus.Conflict, notOpen);
+
+            return Result<PortalChangePreviewDto>.Ok(new PortalChangePreviewDto(check.Data!.Name, DoctorName(doctor), start, null));
+        }, cancellationToken);
+
+    public Task<Result<PortalChangePreviewDto>> PreviewRescheduleAsync(Guid id, PortalRescheduleRequest request, CancellationToken cancellationToken) =>
+        AsPatientAsync(async context =>
+        {
+            var appointment = await appointmentRepository.GetByIdAsync(id, cancellationToken);
+            if (appointment is null || appointment.PatientId != context.Patient.Id)
+                return Result<PortalChangePreviewDto>.Fail(ResultStatus.NotFound, "Appointment was not found.");
+
+            var current = ToPortal(appointment, context);
+            if (!current.CanReschedule) return Result<PortalChangePreviewDto>.Fail(ResultStatus.Conflict, CannotChangeMessage(current, context));
+
+            var start = AsUtc(request.StartTime);
+            if (CheckWindow(start, context) is { } windowError)
+                return Result<PortalChangePreviewDto>.Fail(ResultStatus.ValidationError, windowError);
+            if (await CheckOpenAsync(current.DoctorId, current.ServiceId, start, id, context, cancellationToken) is { } notOpen)
+                return Result<PortalChangePreviewDto>.Fail(ResultStatus.Conflict, notOpen);
+
+            return Result<PortalChangePreviewDto>.Ok(new PortalChangePreviewDto(current.ServiceName, current.DoctorName, current.StartTime, start));
+        }, cancellationToken);
+
+    public Task<Result<PortalChangePreviewDto>> PreviewCancelAsync(Guid id, CancellationToken cancellationToken) =>
+        AsPatientAsync(async context =>
+        {
+            var appointment = await appointmentRepository.GetByIdAsync(id, cancellationToken);
+            if (appointment is null || appointment.PatientId != context.Patient.Id)
+                return Result<PortalChangePreviewDto>.Fail(ResultStatus.NotFound, "Appointment was not found.");
+
+            var current = ToPortal(appointment, context);
+            return current.CanCancel
+                ? Result<PortalChangePreviewDto>.Ok(new PortalChangePreviewDto(current.ServiceName, current.DoctorName, current.StartTime, null))
+                : Result<PortalChangePreviewDto>.Fail(ResultStatus.Conflict, CannotChangeMessage(current, context));
+        }, cancellationToken);
+
+    /// <summary>The rules a booking must meet before it reaches the scheduling engine; the service when it does.</summary>
+    private async Task<Result<Service>> CheckBookingAsync(PortalBookRequest request, PatientContext context, CancellationToken cancellationToken)
+    {
+        var service = await services.GetByIdAsync(request.ServiceId, cancellationToken);
+        if (service is not { IsActive: true, BookableOnline: true })
+            return Result<Service>.Fail(ResultStatus.NotFound, "This service can't be booked online.");
+
+        if (CheckWindow(AsUtc(request.StartTime), context) is { } windowError)
+            return Result<Service>.Fail(ResultStatus.ValidationError, windowError);
+
+        var limit = context.Settings.MaxUpcomingAppointments;
+        if (await portal.CountUpcomingAsync(context.Patient.Id, clock.UtcNow, cancellationToken) >= limit)
+            return Result<Service>.Fail(ResultStatus.Conflict,
+                $"You already have {limit} upcoming appointment{(limit == 1 ? "" : "s")}, the most you can book online.{CallClinic(context.Clinic)}");
+
+        return Result<Service>.Ok(service);
+    }
+
+    /// <summary>Null when <paramref name="startUtc"/> is one of the doctor's open times that day; otherwise why not.</summary>
+    private async Task<string?> CheckOpenAsync(Guid doctorId, Guid serviceId, DateTime startUtc, Guid? movingAppointmentId,
+        PatientContext context, CancellationToken cancellationToken)
+    {
+        var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(startUtc, context.Zone));
+        var slots = await scheduling.GetAvailableSlotsAsync(doctorId, date, serviceId, cancellationToken, movingAppointmentId);
+        if (!slots.Success) return slots.Message;
+        return slots.Data!.Any(s => AsUtc(s.StartTimeUtc) == startUtc)
+            ? null
+            : "That time isn't open. Choose one of the open times.";
+    }
 
     // ---- Signed-in patient: invoices ----
 
@@ -631,7 +706,7 @@ public sealed class PortalService(
             a.StartTime, a.EndTime, a.Status, a.Source, a.Service?.BookableOnline == true && a.Service.IsActive, context);
 
     private PortalAppointmentDto ToPortal(AppointmentDto a, bool serviceBookable, PatientContext context) =>
-        Build(a.Id, a.DoctorId, string.IsNullOrWhiteSpace(a.DoctorName) ? string.Empty : $"Dr. {a.DoctorName}", a.ServiceId, a.ServiceName,
+        Build(a.Id, a.DoctorId, DoctorNames.WithTitle(a.DoctorName), a.ServiceId, a.ServiceName,
             a.StartTime, a.EndTime, a.Status, a.Source, serviceBookable, context);
 
     private PortalAppointmentDto Build(Guid id, Guid doctorId, string doctorName, Guid serviceId, string serviceName,
@@ -661,7 +736,7 @@ public sealed class PortalService(
 
     private static PortalPatientSummaryDto ToSummary(Patient p) => new(p.Id, p.FirstName, p.LastName);
 
-    private static string DoctorName(Doctor d) => $"Dr. {d.FirstName} {d.LastName}".Trim();
+    private static string DoctorName(Doctor d) => DoctorNames.WithTitle(d.FirstName, d.LastName);
 
     private static string CallClinic(Clinic clinic) =>
         string.IsNullOrWhiteSpace(clinic.Phone) ? string.Empty : $" Please call {PhoneNumberRules.Display(clinic.Phone)}.";

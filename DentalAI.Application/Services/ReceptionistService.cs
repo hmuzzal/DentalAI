@@ -28,7 +28,8 @@ public sealed class ReceptionistService(
     private const int MaxToolCallsPerRound = 6;
     private const int MaxRemindersPerMessage = 2;
     private const int MaxHistoryMessages = 40;
-    private const int MaxTimesPerDentist = 40;
+    private const int SuggestedTimesPerDentist = 4;
+    private const int CalendarDays = 14;
     private const string LocalFormat = "yyyy-MM-dd'T'HH:mm";
     private static readonly string[] AcceptedStartFormats = [LocalFormat, "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm"];
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-US");
@@ -59,7 +60,8 @@ public sealed class ReceptionistService(
         var patientId = currentUser.PatientId!.Value;
 
         var conversation = (request.ConversationId is { } id ? conversations.Get(patientId, id) : null) ?? new AssistantConversation();
-        var context = new ToolContext(profile.Data!, SchedulingEngine.ResolveTimeZone(profile.Data!.Clinic.TimeZone), conversation);
+        conversation.Turn++;
+        var context = new ToolContext(profile.Data!, SchedulingEngine.ResolveTimeZone(profile.Data!.Clinic.TimeZone), conversation, text);
 
         // Work on a copy: if the model can't be reached, the chat stays as it was and the patient can send again.
         var messages = new List<ChatMessage>(conversation.Messages) { ChatMessage.User(text) };
@@ -97,6 +99,20 @@ public sealed class ReceptionistService(
 
                         logger.LogWarning("The {Provider} assistant claimed a change it didn't make; the reply was replaced.", model.Provider);
                         reply = $"Sorry, I couldn't complete that, so nothing has been changed. Please try again, use your Visits page{CallText(context)}.";
+                        break;
+                    }
+
+                    // "Your visit is confirmed" when no tool result shows a Confirmed visit: online bookings wait for the
+                    // clinic, and small models call them confirmed anyway. Make it look, or don't say it.
+                    if (SaysConfirmed(answer) && !messages.Any(m => m.Role == ChatRole.Tool && m.Text?.Contains("\"status\":\"Confirmed\"") == true))
+                    {
+                        if (canRemind)
+                        {
+                            Remind(answer, ConfirmedWithoutProofNote);
+                            continue;
+                        }
+
+                        reply = $"Your visit is booked. Your Visits page shows whether the clinic has confirmed it yet{CallText(context)}.";
                         break;
                     }
 
@@ -165,21 +181,31 @@ public sealed class ReceptionistService(
             : "none listed";
         var now = TimeZoneInfo.ConvertTimeFromUtc(clock.UtcNow, context.Zone);
         var phone = string.IsNullOrWhiteSpace(clinic.Phone) ? "the clinic" : PhoneNumberRules.Display(clinic.Phone);
+        var days = string.Join("; ", Enumerable.Range(0, CalendarDays).Select(offset =>
+        {
+            var day = now.Date.AddDays(offset);
+            var label = offset switch { 0 => " (today)", 1 => " (tomorrow)", _ => string.Empty };
+            return $"{day.ToString("ddd MMM d", English)} = {day.ToString("yyyy-MM-dd", English)}{label}";
+        }));
 
         return $"""
             You are the online receptionist for {clinic.Name}, a dental clinic. You are chatting in the clinic's patient portal with {context.Profile.FirstName}, a signed-in patient.
             Right now it is {now.ToString("dddd, MMMM d, yyyy 'at' h:mm tt", English)} at the clinic. Every time you see or give is clinic local time.
+            The next two weeks (day = date to pass to tools): {days}.
 
             You can: answer questions about the clinic, list services and dentists, find open times, and book, move or cancel this patient's own appointments, and show their invoices.
 
             Rules:
             - Use the tools for every fact about services, dentists, open times, appointments and invoices. Never make up times, availability or amounts.
             - Ids such as S1, D2, A3 come from tool results. Pass them back exactly, but never show them to the patient. Pass start times exactly as find_open_times gave them.
-            - When offering times, suggest three or four, not a long list.
+            - To turn a day the patient names ("Friday", "next Monday", "tomorrow") into a date, read it from the two-week list above. Never work it out yourself. Say the day and date back, e.g. "Fri, Nov 20".
+            - When offering times, offer the three or four that find_open_times returns, never a long list. If the patient wants a different time, call find_open_times again with after set to that time.
             - Never say you will check or look something up: call the tool right away, in the same turn, and answer with what it returns.
             - Never ask the patient for an id. To find their appointment, call list_my_appointments.
-            - For "morning" use times before 12:00, for "afternoon" pass after="12:00" to find_open_times.
-            - Before booking, moving or cancelling, say exactly what you will do (service, dentist, day and time) and wait for the patient to say yes in a later message. Never act on a guess.
+            - For "morning" use times before 12:00, for "afternoon" pass after="12:00" to find_open_times. after is 24-hour time: 1 PM = 13:00, 2:15 PM = 14:15, 4:30 PM = 16:30. A time the patient gives without AM or PM between 1 and 6 means PM.
+            - To check a time the patient asks for, pass it as after and read open_at_exactly_that_time. When telling the patient a time, use its "say" value.
+            - book_appointment, reschedule_appointment and cancel_appointment first answer needs_confirmation with the exact change. Tell the patient that change and ask them to confirm, even if they already picked the time. Only after they say yes, call the same tool again with the same values. Never say it is done until a tool result says ok.
+            - A visit whose status is Pending is waiting for the clinic to confirm it. Say so; never call it confirmed unless its status is Confirmed.
             - If a day has no open times, offer to check the next few days.
             - Online bookings need {clinic.MinNoticeHours} hours' notice and can be up to {clinic.MaxDaysAhead} days ahead. Visits can be moved or cancelled online until {clinic.CancelCutoffHours} hours before.
             - You can't give medical advice. For severe pain, swelling or bleeding, tell them to call {phone}; in an emergency, call local emergency services.
@@ -202,6 +228,23 @@ public sealed class ReceptionistService(
 
     /// <summary>Does the reply say a visit was booked, moved or cancelled ("has been cancelled", "you're booked")?</summary>
     public static bool ClaimsAChange(string? reply) => !string.IsNullOrEmpty(reply) && ChangeClaim.IsMatch(reply);
+
+    private const string ConfirmedWithoutProofNote =
+        "[Note from the system, not the patient: your last reply said a visit is confirmed, but no tool result shows a visit with " +
+        "status Confirmed. Online bookings are Pending until the clinic confirms them. Call list_my_appointments and tell the " +
+        "patient the status it shows; say Pending visits are waiting for the clinic to confirm.]";
+
+    private static readonly System.Text.RegularExpressions.Regex ConfirmedClaim = new(
+        @"\b(?:is|are|has been|have been|it's|you're|you are)\s+(?:now\s+|all\s+)?confirmed\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static readonly System.Text.RegularExpressions.Regex ConfirmedHedge = new(
+        @"\b(?:waiting|pending|once|until|not yet|not been|isn't|hasn't)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>Does the reply say a visit is confirmed ("your visit is confirmed"), without saying it's still waiting?</summary>
+    public static bool SaysConfirmed(string? reply) =>
+        !string.IsNullOrEmpty(reply) && ConfirmedClaim.IsMatch(reply) && !ConfirmedHedge.IsMatch(reply);
 
     private const string StallNote =
         "[Note from the system, not the patient: don't say you will check, list or find something, and never ask the patient for " +
@@ -237,7 +280,7 @@ public sealed class ReceptionistService(
         new("list_dentists", "Lists the clinic's dentists, with their ids.",
             """{"type":"object","properties":{}}"""),
         new("find_open_times",
-            "Finds open appointment times on one day for a service, for one dentist or for every dentist. Returns start times to book with.",
+            "Finds open appointment times on one day for a service, for one dentist or for every dentist. Returns up to four start times across the day per dentist, and how many others are open; pass after=HH:mm for a specific time.",
             """
             {"type":"object","properties":{
               "service_id":{"type":"string","description":"Service id from list_services, e.g. S1."},
@@ -249,7 +292,7 @@ public sealed class ReceptionistService(
             """),
         new("list_my_appointments", "Lists this patient's upcoming and recent appointments, with ids and whether each can still be changed online.",
             """{"type":"object","properties":{}}"""),
-        new("book_appointment", "Books an appointment for this patient. Only after the patient has said yes to the exact service, dentist and time.",
+        new("book_appointment", "Books an appointment for this patient. The first call only checks it and returns needs_confirmation; call again with the same values after the patient says yes.",
             """
             {"type":"object","properties":{
               "service_id":{"type":"string","description":"Service id, e.g. S1."},
@@ -258,14 +301,14 @@ public sealed class ReceptionistService(
               "note":{"type":"string","description":"Optional short note for the clinic from the patient."}
             },"required":["service_id","dentist_id","start"]}
             """),
-        new("reschedule_appointment", "Moves one of this patient's appointments to a new time with the same dentist. Only after the patient has said yes.",
+        new("reschedule_appointment", "Moves one of this patient's appointments to a new time with the same dentist. The first call only checks it and returns needs_confirmation; call again with the same values after the patient says yes.",
             """
             {"type":"object","properties":{
               "appointment_id":{"type":"string","description":"Appointment id from list_my_appointments, e.g. A1."},
               "start":{"type":"string","description":"New start time exactly as find_open_times gave it, YYYY-MM-DDTHH:mm."}
             },"required":["appointment_id","start"]}
             """),
-        new("cancel_appointment", "Cancels one of this patient's appointments. Only after the patient has said yes.",
+        new("cancel_appointment", "Cancels one of this patient's appointments. The first call only checks it and returns needs_confirmation; call again with the same values after the patient says yes.",
             """
             {"type":"object","properties":{
               "appointment_id":{"type":"string","description":"Appointment id from list_my_appointments, e.g. A1."}
@@ -372,6 +415,8 @@ public sealed class ReceptionistService(
 
         var dentists = new List<object>();
         var openCount = 0;
+        var moreTimes = false;
+        var openAtAfter = false;
         foreach (var doctor in candidates)
         {
             var slots = await portal.GetSlotsAsync(doctor.Id, serviceId, date, appointmentId, cancellationToken);
@@ -384,25 +429,50 @@ public sealed class ReceptionistService(
             var starts = slots.Data!
                 .Select(s => Local(s.StartTimeUtc, context))
                 .Where(local => after is null || TimeOnly.FromDateTime(local) >= after)
-                .Select(local => local.ToString(LocalFormat, English))
                 .ToList();
             openCount += starts.Count;
+            moreTimes |= starts.Count > SuggestedTimesPerDentist;
+            openAtAfter |= after is { } wanted && starts.Any(local => TimeOnly.FromDateTime(local) == wanted);
             dentists.Add(new
             {
                 Id = context.Conversation.RefFor('D', doctor.Id),
                 doctor.Name,
-                Starts = starts.Take(MaxTimesPerDentist),
-                MoreTimes = starts.Count > MaxTimesPerDentist ? starts.Count - MaxTimesPerDentist : (int?)null
+                // A few times across the day: small models read out every time they are given. Each time is also
+                // written the way the patient says it, so the model doesn't convert 24-hour times itself.
+                Times = SpreadTimes(starts, SuggestedTimesPerDentist)
+                    .Select(local => new { Start = local.ToString(LocalFormat, English), Say = local.ToString("h:mm tt", English) }),
+                OtherOpenTimes = starts.Count > SuggestedTimesPerDentist ? starts.Count - SuggestedTimesPerDentist : (int?)null
             });
         }
 
         return Json(new
         {
             Date = date.ToString("yyyy-MM-dd", English),
-            Day = date.ToString("dddd", English),
+            Day = date.ToString("dddd, MMM d", English),
+            // Echoed back in 12-hour form, so a wrong conversion ("2:15 PM" passed as 13:15) shows up.
+            After = after?.ToString("h:mm tt", English),
+            OpenAtExactlyThatTime = after is null ? (bool?)null : openAtAfter,
             Dentists = dentists,
-            Note = openCount > 0 ? null : "No open times that day."
+            Note = openCount == 0
+                ? "No open times that day."
+                : moreTimes
+                    ? "Offer these times. For a different time, call find_open_times again with after set to it (24-hour HH:mm)."
+                    : null
         });
+    }
+
+    /// <summary>
+    /// Up to <paramref name="count"/> times spread across the list, always starting with the first, so the patient sees
+    /// the earliest time and a choice later in the day. With after=HH:mm the first is the one they asked for.
+    /// </summary>
+    public static IReadOnlyList<T> SpreadTimes<T>(IReadOnlyList<T> times, int count)
+    {
+        if (times.Count <= count) return times;
+        if (count <= 1) return [times[0]];
+        return Enumerable.Range(0, count)
+            .Select(i => times[(int)Math.Round(i * (times.Count - 1) / (double)(count - 1))])
+            .Distinct()
+            .ToList();
     }
 
     private async Task<string> ListAppointmentsAsync(ToolContext context, CancellationToken cancellationToken)
@@ -431,13 +501,23 @@ public sealed class ReceptionistService(
             return (Error("Unknown dentist_id. Call list_dentists and use an id from it."), false);
         if (ReadStart(args, context, out var startUtc) is { } startError) return (Error(startError), false);
 
-        var result = await portal.BookAsync(new PortalBookRequest
+        var request = new PortalBookRequest
         {
             ServiceId = serviceId,
             DoctorId = dentistId,
             StartTime = startUtc,
             Note = Text(args, "note")
-        }, cancellationToken);
+        };
+        var key = $"book|{serviceId:N}|{dentistId:N}|{startUtc:O}";
+        if (!Confirmed(context, key))
+        {
+            var preview = await portal.PreviewBookingAsync(request, cancellationToken);
+            return preview.Success
+                ? (AskToConfirm(context, key, $"Book {preview.Data!.ServiceName} with {preview.Data.DoctorName} on {When(preview.Data.StartTimeUtc, context)}"), false)
+                : (Error(preview.Message), false);
+        }
+
+        var result = await portal.BookAsync(request, cancellationToken);
         return result.Success
             ? (Json(new { Ok = true, result.Message, Appointment = Describe(result.Data!, context) }), true)
             : (Error(result.Message), false);
@@ -449,7 +529,18 @@ public sealed class ReceptionistService(
             return (Error("Unknown appointment_id. Call list_my_appointments and use an id from it."), false);
         if (ReadStart(args, context, out var startUtc) is { } startError) return (Error(startError), false);
 
-        var result = await portal.RescheduleAsync(appointmentId, new PortalRescheduleRequest { StartTime = startUtc }, cancellationToken);
+        var request = new PortalRescheduleRequest { StartTime = startUtc };
+        var key = $"move|{appointmentId:N}|{startUtc:O}";
+        if (!Confirmed(context, key))
+        {
+            var preview = await portal.PreviewRescheduleAsync(appointmentId, request, cancellationToken);
+            return preview.Success
+                ? (AskToConfirm(context, key, $"Move the {preview.Data!.ServiceName} with {preview.Data.DoctorName} from " +
+                    $"{When(preview.Data.StartTimeUtc, context)} to {When(preview.Data.NewStartTimeUtc!.Value, context)}"), false)
+                : (Error(preview.Message), false);
+        }
+
+        var result = await portal.RescheduleAsync(appointmentId, request, cancellationToken);
         return result.Success
             ? (Json(new { Ok = true, result.Message, Appointment = Describe(result.Data!, context) }), true)
             : (Error(result.Message), false);
@@ -459,6 +550,15 @@ public sealed class ReceptionistService(
     {
         if (context.Conversation.Resolve('A', Text(args, "appointment_id")) is not { } appointmentId)
             return (Error("Unknown appointment_id. Call list_my_appointments and use an id from it."), false);
+
+        var key = $"cancel|{appointmentId:N}";
+        if (!Confirmed(context, key))
+        {
+            var preview = await portal.PreviewCancelAsync(appointmentId, cancellationToken);
+            return preview.Success
+                ? (AskToConfirm(context, key, $"Cancel the {preview.Data!.ServiceName} with {preview.Data.DoctorName} on {When(preview.Data.StartTimeUtc, context)}"), false)
+                : (Error(preview.Message), false);
+        }
 
         var result = await portal.CancelAsync(appointmentId, cancellationToken);
         return result.Success
@@ -490,9 +590,54 @@ public sealed class ReceptionistService(
         });
     }
 
+    // ---- Confirmation ----
+    // Asking the patient before a change isn't left to the model. The first call for a change only checks it and stores
+    // it as pending. It runs only when the model asks for exactly the same change while answering the patient's very next
+    // message, and that message says yes. A patient picking a time ("the first one") therefore gets asked, not booked.
+
+    private static bool Confirmed(ToolContext context, string key)
+    {
+        var conversation = context.Conversation;
+        var confirmed = conversation.Pending is { } pending
+            && pending.Key == key
+            && pending.Turn == conversation.Turn - 1
+            && SaysYes(context.PatientMessage);
+        if (confirmed) conversation.Pending = null;
+        return confirmed;
+    }
+
+    private static string AskToConfirm(ToolContext context, string key, string change)
+    {
+        context.Conversation.Pending = new PendingChange(key, context.Conversation.Turn);
+        return Json(new
+        {
+            Ok = false,
+            NeedsConfirmation = true,
+            Change = change,
+            Instruction = "Nothing has been changed yet. Ask the patient to confirm exactly this change. Once they say yes, " +
+                          "call this tool again with the same values."
+        });
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex Yes = new(
+        @"\b(?:y|yes|yeah|yea|yep|yup|sure|ok|okay|k|confirm(?:ed)?|correct|right|please do|go ahead|do it|book it|cancel it|move it|sounds good|perfect|great|absolutely|definitely|that works|works for me)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static readonly System.Text.RegularExpressions.Regex No = new(
+        @"^\W*(?:no|nope|nah|wait|hold on|stop)\b|\b(?:not|don't|dont|do not|never|instead|rather)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>Does the patient's message say yes ("Yes please", "ok go ahead"), without a no or a change of mind?</summary>
+    public static bool SaysYes(string? message) =>
+        !string.IsNullOrWhiteSpace(message) && Yes.IsMatch(message) && !No.IsMatch(message);
+
+    private static string When(DateTime utc, ToolContext context) =>
+        Local(utc, context).ToString("ddd, MMM d 'at' h:mm tt", English);
+
     // ---- Helpers ----
 
-    private sealed record ToolContext(PortalProfileDto Profile, TimeZoneInfo Zone, AssistantConversation Conversation);
+    /// <param name="PatientMessage">What the patient wrote this turn.</param>
+    private sealed record ToolContext(PortalProfileDto Profile, TimeZoneInfo Zone, AssistantConversation Conversation, string PatientMessage);
 
     private object Describe(PortalAppointmentDto a, ToolContext context) => new
     {
@@ -567,7 +712,8 @@ public sealed class ReceptionistService(
     private static string Outcome(string resultJson)
     {
         using var document = JsonDocument.Parse(resultJson);
-        return document.RootElement.TryGetProperty("error", out var error) ? $"error: {error.GetString()}" : "ok";
+        if (document.RootElement.TryGetProperty("error", out var error)) return $"error: {error.GetString()}";
+        return document.RootElement.TryGetProperty("needs_confirmation", out _) ? "waiting for the patient to confirm" : "ok";
     }
 
     private static string Error(string message) => Json(new { Ok = false, Error = message });

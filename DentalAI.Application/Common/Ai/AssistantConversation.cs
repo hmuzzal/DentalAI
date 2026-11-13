@@ -15,6 +15,15 @@ public sealed class AssistantConversation
     /// </summary>
     public Dictionary<string, Guid> Refs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>How many patient messages this chat has had.</summary>
+    public int Turn { get; set; }
+
+    /// <summary>
+    /// The booking, move or cancellation the assistant last put to the patient. It runs only when the model asks for
+    /// exactly the same change in reply to the patient's very next message, and that message says yes.
+    /// </summary>
+    public PendingChange? Pending { get; set; }
+
     public string RefFor(char prefix, Guid id)
     {
         foreach (var (key, value) in Refs)
@@ -43,3 +52,7 @@ public interface IAssistantConversationStore
     AssistantConversation? Get(Guid patientId, Guid conversationId);
     void Save(Guid patientId, AssistantConversation conversation);
 }
+
+/// <param name="Key">What exactly would change, e.g. "book|service|dentist|start-utc".</param>
+/// <param name="Turn">The patient message during which it was proposed.</param>
+public sealed record PendingChange(string Key, int Turn);

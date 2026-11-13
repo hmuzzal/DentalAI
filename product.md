@@ -448,8 +448,13 @@ move or cancel their own visits. Voice comes in Phase 7.
 - **The model can only do what the patient can do.** Every tool calls `PortalService`, so all portal rules apply:
   the signed-in patient's records only, bookable-online services, notice, how far ahead, cut-off, the upcoming-visit
   limit, the scheduling engine and its lock. A weak model makes the assistant less helpful, never less safe.
-- **Confirm first.** The system prompt has the assistant state the exact service, dentist and time and wait for
-  a "yes" before booking, moving or cancelling. Online bookings still arrive as Pending unless the clinic auto-confirms.
+- **Confirm first, enforced by the server.** Booking, moving and cancelling take two steps. The first tool call only
+  checks the change against every rule, including whether the time is still open (`PortalService.Preview*`). It saves
+  nothing and returns `needs_confirmation` with the exact change ("Book Cleaning with Dr. Sarah Ahmed on Tue, Nov 18 at
+  3:00 PM"). The change runs only when the model asks for exactly the same change while answering the patient's very
+  next message, and that message says yes ("yes", "ok go ahead"; not "no", "don't", "instead"). Picking a time ("the
+  first one please") therefore gets a question, not a booking. Online bookings still arrive as Pending unless the clinic
+  auto-confirms. (Before 2026-11-14 this was only a prompt rule, and qwen2.5:7b once booked when the patient picked a time.)
 - **Server-side conversations.** The browser holds only a conversation id. History, including tool results, stays in
   server memory (30 minutes idle, 4 hours at most), keyed by patient, so it can't be edited or read by anyone else.
   Nothing is written to the database. More than one API server will need a shared store (e.g. Redis).
@@ -465,10 +470,16 @@ move or cancel their own visits. Voice comes in Phase 7.
   (Found in a real test: qwen2.5:7b once said "has been cancelled" without cancelling.)
 - **Help for small models:** the services and dentists, with their short ids, are in the instructions from the first
   message; tools also accept a name ("Teeth Whitening", "Dr. Ahmed") instead of an id; find_open_times takes an optional
-  `after` time (for "afternoon") and returns up to 40 times per dentist.
+  `after` time (24-hour, for "afternoon" or a specific time; it says whether that exact time is open and echoes it in
+  12-hour form, because the model once passed 13:15 for "2:15") and returns 4 times spread across the day per dentist,
+  each with its 12-hour wording, and a count of
+  the others (it read out all 17 when it got them). The instructions list the next 14 days with their dates, because the model
+  once turned "Friday" into Tuesday. A Pending visit is described as waiting for the clinic, never "confirmed".
 - **Logging:** every tool call is logged with its name and outcome (ok, or the tool's own error text). Arguments only at
   Debug level, because a booking note is the patient's own text.
 - **No medical advice.** The prompt sends urgent symptoms to the clinic's phone or emergency services.
+- **Doctor names** on the portal, in the assistant and in patient messages get "Dr." once (`DoctorNames`), even when staff
+  typed the title into the name (first name "Dr."), which used to show "Dr. Dr. Sarah Ahmed".
 - **Health data.** Free cloud tiers (e.g. Gemini's) may use prompts to improve their models: **test data only**. Real
   clinics need Ollama on our own servers, or a paid provider that signs a HIPAA business associate agreement. The
   API logs a warning when Gemini is used outside Development.
@@ -490,10 +501,10 @@ move or cancel their own visits. Voice comes in Phase 7.
   provider selection
 
 **Not done yet**
-- Builds; all tests pass (149 unit, 129 integration). Tried end to end on 2026-11-13 against the running API with Ollama
+- Builds; all tests pass (181 unit, 130 integration). Tried end to end on 2026-11-13 against the running API with Ollama
   and qwen2.5:7b on the dev machine: questions, afternoon times, booking, "when is my next visit" and cancelling all work
-  (about 1–6 s a reply on the GPU; the first call after loading takes about a minute). Seen: it once booked when the
-  patient picked a time ("the first one please") without a separate yes; online bookings still arrive as Pending.
+  (about 1–6 s a reply on the GPU; the first call after loading takes about a minute). The server-enforced confirmation
+  (2026-11-14) is covered by tests but not yet tried with the real model.
 - The chat page itself hasn't been clicked through in a browser (the browser extension wasn't connected). Gemini hasn't
   been tried (no key yet).
 - Later: OpenAI and Claude adapters; a per-clinic on/off switch; a staff view of chats; the assistant for visitors
