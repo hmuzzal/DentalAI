@@ -84,7 +84,7 @@ appointments, doctors, services or schedules:
 | 3 | Email and SMS reminders (SMTP / Twilio, outbox and background worker) | ✅ Done 2026-11-05 (delivery needs provider credentials) |
 | 4 | Reports and analytics | ✅ Done 2026-11-07 (practice report, receivables aging, CSV) |
 | 5 | Patient portal (self-booking) | ✅ Done 2026-11-08 (code sign-in, booking, invoices) |
-| 6 | AI receptionist: chat (Claude, tool use against the scheduling API) | ⬜ |
+| 6 | AI receptionist: chat (Ollama or Gemini now; OpenAI and Claude later; tool use against the portal API) | ✅ Done 2026-11-13 (Ollama; Gemini untested; OpenAI and Claude later) |
 | 7 | Voice AI receptionist (telephony + speech) | ⬜ |
 | 8 | Mobile app | ⬜ |
 | 9 | Integrations (Google Calendar, Outlook, payment gateways) | ⬜ |
@@ -436,7 +436,70 @@ Same booking API and engine as the front desk (core principle 3).
 Not yet tested: the per-IP sign-in rate limit (raised in tests), and the portal UI in a browser (Angular builds; API flow checked end to end).
 Later: pay invoices online (needs 2c), intake forms, "first available doctor", insurance card upload, Bengali.
 
-### Phases 6–10
+### Phase 6: AI receptionist (chat) ✅ Built 2026-11-13; tried end to end with Ollama (chat page not yet clicked through in a browser)
+A chat page in the patient portal ("Ask us") where a signed-in patient can ask questions, find open times, and book,
+move or cancel their own visits. Voice comes in Phase 7.
+
+**Decisions**
+- **Provider-neutral.** The assistant talks to an `IChatModel` interface. `Ai:Provider` chooses the model:
+  `None` (default, the assistant is hidden), `Ollama` (a local model, free, nothing leaves the machine) or `Gemini`
+  (Google, free tier). `OpenAI` and `Claude` are reserved: their settings already exist, but the API refuses to
+  start with them until their adapters are written. Development uses Ollama (`qwen2.5:7b`).
+- **The model can only do what the patient can do.** Every tool calls `PortalService`, so all portal rules apply:
+  the signed-in patient's records only, bookable-online services, notice, how far ahead, cut-off, the upcoming-visit
+  limit, the scheduling engine and its lock. A weak model makes the assistant less helpful, never less safe.
+- **Confirm first.** The system prompt has the assistant state the exact service, dentist and time and wait for
+  a "yes" before booking, moving or cancelling. Online bookings still arrive as Pending unless the clinic auto-confirms.
+- **Server-side conversations.** The browser holds only a conversation id. History, including tool results, stays in
+  server memory (30 minutes idle, 4 hours at most), keyed by patient, so it can't be edited or read by anyone else.
+  Nothing is written to the database. More than one API server will need a shared store (e.g. Redis).
+- **Short ids for the model.** Tools show services, dentists and appointments as S1, D2, A3 instead of GUIDs,
+  because small local models copy those reliably.
+- **Limits** (all in the "Ai" settings): messages up to `MaxMessageLength` (1,000) characters, and the portal page uses the
+  same number; at most `MaxModelCallsPerMessage` (6) model calls per message; `MessagesPerMinute` (12) per IP;
+  `TimeoutSeconds` (120) per model call. Also fixed in code: 6 tool calls per model call, the last 40 messages sent.
+- **The assistant can't claim what it didn't do.** If a reply says something was booked, moved or cancelled but no
+  booking tool succeeded during that message, the model is told privately that nothing changed and asked to act or say
+  so (up to 2 reminders). If it still claims success, the patient gets "Sorry, I couldn't complete that, so nothing has
+  been changed" instead. The same reminder covers "Let me check..." with no lookup, and asking the patient for an ID.
+  (Found in a real test: qwen2.5:7b once said "has been cancelled" without cancelling.)
+- **Help for small models:** the services and dentists, with their short ids, are in the instructions from the first
+  message; tools also accept a name ("Teeth Whitening", "Dr. Ahmed") instead of an id; find_open_times takes an optional
+  `after` time (for "afternoon") and returns up to 40 times per dentist.
+- **Logging:** every tool call is logged with its name and outcome (ok, or the tool's own error text). Arguments only at
+  Debug level, because a booking note is the patient's own text.
+- **No medical advice.** The prompt sends urgent symptoms to the clinic's phone or emergency services.
+- **Health data.** Free cloud tiers (e.g. Gemini's) may use prompts to improve their models: **test data only**. Real
+  clinics need Ollama on our own servers, or a paid provider that signs a HIPAA business associate agreement. The
+  API logs a warning when Gemini is used outside Development.
+
+**Setup**
+- Ollama: install it, run `ollama pull qwen2.5:7b` (about 5 GB of RAM), set `Ai:Provider` to `Ollama` (the Development default).
+  `Ai:Ollama:ContextLength` (default 16384) overrides Ollama's 4096-token default, which is too small for the tools and a chat.
+- Gemini: create a key in Google AI Studio, set the `Ai__Gemini__ApiKey` environment variable (never appsettings.json)
+  and set `Ai:Provider` to `Gemini`. The default model is `gemini-2.5-flash`.
+
+**Built**
+- [x] API: `GET /portal/assistant` (on/off), `POST /portal/assistant/messages` (patient token, rate-limited); 503 when off or the model is down
+- [x] Tools: list services, list dentists, find open times (one or all dentists), list my appointments, book, reschedule,
+  cancel, list my invoices
+- [x] Adapters: Ollama `/api/chat` and Gemini `generateContent` (function calling, thought signatures)
+- [x] UI: "Ask us" in the portal menu (only when on), chat with suggested questions, a "See my visits" link after a change
+- [x] Tests: a scripted model books end to end through the portal rules; it can't break the notice rule or touch another
+  patient's visit; off, down, staff and anonymous callers; conversations can't cross patients; adapter JSON both ways;
+  provider selection
+
+**Not done yet**
+- Builds; all tests pass (149 unit, 129 integration). Tried end to end on 2026-11-13 against the running API with Ollama
+  and qwen2.5:7b on the dev machine: questions, afternoon times, booking, "when is my next visit" and cancelling all work
+  (about 1–6 s a reply on the GPU; the first call after loading takes about a minute). Seen: it once booked when the
+  patient picked a time ("the first one please") without a separate yes; online bookings still arrive as Pending.
+- The chat page itself hasn't been clicked through in a browser (the browser extension wasn't connected). Gemini hasn't
+  been tried (no key yet).
+- Later: OpenAI and Claude adapters; a per-clinic on/off switch; a staff view of chats; the assistant for visitors
+  who aren't signed in (FAQ only); Bengali.
+
+### Phases 7–10
 Scoped in detail when each phase starts. Key dependencies:
 - The AI receptionist (6) builds on stable booking/reschedule APIs (1) and patient lookup by phone (1.5).
 - Voice (7) builds on chat (6) and telephony (3).

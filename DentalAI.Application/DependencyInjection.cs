@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<NotificationService>();
         services.AddScoped<ReportService>();
         services.AddScoped<PortalService>();
+        services.AddScoped<ReceptionistService>();
         services.AddScoped<ReminderScheduler>();
         services.AddScoped<MessageDispatcher>();
         services.AddScoped<InboundSmsHandler>();

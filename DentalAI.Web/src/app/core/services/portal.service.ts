@@ -4,7 +4,7 @@ import { map, Observable } from 'rxjs';
 import { silentErrors } from '../../shared/forms';
 import { ApiResponse } from '../models/api-response.model';
 import {
-  PortalAppointment, PortalClinic, PortalDoctor, PortalInvoice, PortalInvoiceList, PortalProfile, PortalProfileRequest,
+  PortalAppointment, PortalAssistantReply, PortalAssistantStatus, PortalClinic, PortalDoctor, PortalInvoice, PortalInvoiceList, PortalProfile, PortalProfileRequest,
   PortalRegisterRequest, PortalService as PortalServiceItem, PortalSession, PortalSettings, PortalSettingsRequest,
   PortalStartResponse, PortalVerifyResponse
 } from '../models/portal.models';
@@ -92,6 +92,17 @@ export class PortalApiService {
 
   invoice(id: string): Observable<PortalInvoice> {
     return this.http.get<ApiResponse<PortalInvoice>>(`${this.base}/invoices/${id}`).pipe(map((r) => r.data));
+  }
+
+  // ---- AI assistant (callers show their own errors) ----
+
+  assistantStatus(): Observable<PortalAssistantStatus> {
+    return this.http.get<ApiResponse<PortalAssistantStatus>>(`${this.base}/assistant`, silentErrors()).pipe(map((r) => r.data));
+  }
+
+  sendToAssistant(conversationId: string | null, message: string): Observable<PortalAssistantReply> {
+    return this.http.post<ApiResponse<PortalAssistantReply>>(`${this.base}/assistant/messages`, { conversationId, message }, silentErrors())
+      .pipe(map((r) => r.data));
   }
 
   private auth(slug: string): string {

@@ -34,7 +34,7 @@ public sealed record StaffAppointment(Guid Id, string Status, string Source);
 /// records, and the clinic's booking rules. Every test uses its own clinic.
 /// </summary>
 [Collection(ApiCollection.Name)]
-public sealed class PortalTests(ApiFactory factory)
+public sealed partial class PortalTests(ApiFactory factory)
 {
     // ---- Settings ----
 
@@ -468,6 +468,9 @@ public sealed class PortalTests(ApiFactory factory)
         using var scope = factory.Services.CreateScope();
         await work(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
     }
+
+    /// <summary>The assistant's scripted model (see PortalAssistantTests).</summary>
+    private ScriptedChatModel ChatModel => factory.ChatModel;
 
     private HttpClient Anonymous() => factory.CreateClient();
 

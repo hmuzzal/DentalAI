@@ -1,9 +1,12 @@
 using DentalAI.Infrastructure.Persistence;
+using DentalAI.Application.Common.Ai;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace DentalAI.Api.IntegrationTests.Infrastructure;
@@ -23,6 +26,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public const string TwilioTestAuthToken = "test-twilio-auth-token";
     public const string TwilioWebhookUrl = "https://api.test.local/api/webhooks/twilio/sms";
 
+    /// <summary>The portal assistant's model: tests script its answers.</summary>
+    public ScriptedChatModel ChatModel { get; } = new();
+
     private static string Server => Environment.GetEnvironmentVariable("DENTALAI_TEST_SQLSERVER") ?? ".";
 
     private string ConnectionString(string database) =>
@@ -37,8 +43,14 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Notifications:BackgroundJobsEnabled", "false");
         // Every test client shares one address; the per-IP sign-in limit is tested separately.
         builder.UseSetting("Portal:SignInRequestsPerMinute", "100000");
+        builder.UseSetting("Ai:MessagesPerMinute", "100000");
         builder.UseSetting("Notifications:Sms:Twilio:AuthToken", TwilioTestAuthToken);
         builder.UseSetting("Notifications:Sms:Twilio:InboundWebhookUrl", TwilioWebhookUrl);
+        builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatModel>();
+            services.AddSingleton<IChatModel>(ChatModel);
+        });
     }
 
     public Task InitializeAsync()

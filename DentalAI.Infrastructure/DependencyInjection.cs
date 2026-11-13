@@ -1,5 +1,6 @@
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Interfaces.Persistence;
+using DentalAI.Infrastructure.Ai;
 using DentalAI.Infrastructure.Configuration;
 using DentalAI.Application.Common.Notifications;
 using DentalAI.Infrastructure.Notifications;
@@ -40,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<IReportRepository, ReportRepository>();
         services.AddScoped<IPortalRepository, PortalRepository>();
         AddNotificationProviders(services, configuration);
+        services.AddAiAssistant(configuration);
 
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();

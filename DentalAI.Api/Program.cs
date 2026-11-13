@@ -11,6 +11,7 @@ using DentalAI.Domain.Enums;
 using DentalAI.Infrastructure;
 using DentalAI.Infrastructure.Configuration;
 using DentalAI.Infrastructure.Persistence;
+using DentalAI.Application.Common.Ai;
 using DentalAI.Infrastructure.Security;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -190,12 +191,16 @@ builder.Services.AddAuthorization(options =>
 
 // Sign-in codes are guessable in principle: limit sign-in calls per client IP (on top of the per-contact limits).
 var portalSignInPerMinute = Math.Max(1, builder.Configuration.GetValue("Portal:SignInRequestsPerMinute", 20));
+var assistantMessagesPerMinute = Math.Max(1, builder.Configuration.GetValue("Ai:MessagesPerMinute", 12));
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy(PortalRateLimits.SignIn, context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = portalSignInPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy(PortalRateLimits.Assistant, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = assistantMessagesPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.OnRejected = async (context, cancellationToken) =>
         await context.HttpContext.Response.WriteAsJsonAsync(new ApiResponse
         {
@@ -240,6 +245,14 @@ using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
+    var chatModel = services.GetRequiredService<IChatModel>();
+    logger.LogInformation("Portal assistant: {Provider}.", chatModel.IsEnabled ? chatModel.Provider : "off");
+    if (chatModel.Provider == "Gemini" && !app.Environment.IsDevelopment())
+    {
+        logger.LogWarning("The portal assistant uses Gemini. Its free tier may use prompts to improve Google's models: "
+            + "use it only with test data, or a paid plan whose terms cover health data.");
+    }
 
     try
     {

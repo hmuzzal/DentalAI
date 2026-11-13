@@ -55,6 +55,7 @@ public abstract class ApiControllerBase : ControllerBase
         ResultStatus.Forbidden => StatusCodes.Status403Forbidden,
         ResultStatus.Conflict => StatusCodes.Status409Conflict,
         ResultStatus.TooManyRequests => StatusCodes.Status429TooManyRequests,
+        ResultStatus.Unavailable => StatusCodes.Status503ServiceUnavailable,
         _ => StatusCodes.Status400BadRequest
     };
 }

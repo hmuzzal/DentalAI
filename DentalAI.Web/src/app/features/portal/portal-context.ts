@@ -10,6 +10,10 @@ export class PortalContext {
   readonly slug = signal('');
   readonly clinic = signal<PortalClinic | null>(null);
   readonly status = signal<'loading' | 'ready' | 'missing'>('loading');
+  /** Whether the signed-in patient can chat with the AI assistant (a server setting). */
+  readonly assistant = signal(false);
+  /** Longest message the assistant takes (a server setting). */
+  readonly assistantMaxLength = signal(1000);
   /** Every time in the portal is shown in the clinic's zone. */
   readonly zone = computed(() => effectiveTimeZone(this.clinic()?.timeZone));
 

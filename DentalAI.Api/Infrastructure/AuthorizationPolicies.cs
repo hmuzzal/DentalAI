@@ -34,4 +34,7 @@ public static class PortalRateLimits
 {
     /// <summary>Sign-in, code and refresh calls, per client IP.</summary>
     public const string SignIn = "portal-sign-in";
+
+    /// <summary>Messages to the AI assistant, per client IP: each one can mean several model calls.</summary>
+    public const string Assistant = "portal-assistant";
 }

@@ -12,7 +12,7 @@ namespace DentalAI.Api.Controllers;
 /// (portal audience), which staff endpoints never accept. A patient only ever sees their own records.
 /// </summary>
 [Authorize(Policy = AuthorizationPolicies.PortalPatient)]
-public sealed class PortalController(PortalService portal) : ApiControllerBase
+public sealed class PortalController(PortalService portal, ReceptionistService assistant) : ApiControllerBase
 {
     // ---- Public ----
 
@@ -104,4 +104,16 @@ public sealed class PortalController(PortalService portal) : ApiControllerBase
     [HttpGet("invoices/{id:guid}")]
     public async Task<IActionResult> GetInvoice(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await portal.GetInvoiceAsync(id, cancellationToken));
+
+    // ---- Signed-in patient: AI assistant ----
+
+    /// <summary>Whether the assistant is on (the portal hides it otherwise).</summary>
+    [HttpGet("assistant")]
+    public IActionResult GetAssistant() => HandleResult(assistant.GetStatus());
+
+    /// <summary>One patient message; the reply comes back when the assistant has finished (it may book, move or cancel).</summary>
+    [EnableRateLimiting(PortalRateLimits.Assistant)]
+    [HttpPost("assistant/messages")]
+    public async Task<IActionResult> SendAssistantMessage([FromBody] AssistantMessageRequest request, CancellationToken cancellationToken) =>
+        HandleResult(await assistant.SendAsync(request, cancellationToken));
 }

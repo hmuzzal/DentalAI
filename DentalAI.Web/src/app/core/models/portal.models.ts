@@ -184,3 +184,18 @@ export interface PortalSettings {
 }
 
 export type PortalSettingsRequest = Omit<PortalSettings, 'path'>;
+
+/** The portal's AI assistant: on or off (server setting), and one reply. */
+export interface PortalAssistantStatus {
+  enabled: boolean;
+  provider: string;
+  /** Longest message the assistant takes, in characters. */
+  maxMessageLength: number;
+}
+
+export interface PortalAssistantReply {
+  conversationId: string;
+  reply: string;
+  /** The assistant booked, moved or cancelled something. */
+  appointmentsChanged: boolean;
+}

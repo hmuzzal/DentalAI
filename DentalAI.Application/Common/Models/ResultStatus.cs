@@ -9,5 +9,7 @@ public enum ResultStatus
     Forbidden = 5,
     Conflict = 6,
     Error = 7,
-    TooManyRequests = 8
+    TooManyRequests = 8,
+    /// <summary>A service the request depends on (e.g. the AI model) is down or turned off.</summary>
+    Unavailable = 9
 }

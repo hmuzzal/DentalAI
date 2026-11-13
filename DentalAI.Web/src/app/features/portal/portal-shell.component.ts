@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -38,6 +38,9 @@ import { PortalContext } from './portal-context';
             <a [routerLink]="context.link()" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
               <span nz-icon nzType="calendar"></span>Visits</a>
             <a [routerLink]="context.link('book')" routerLinkActive="active"><span nz-icon nzType="plus"></span>Book</a>
+            @if (context.assistant()) {
+              <a [routerLink]="context.link('assistant')" routerLinkActive="active"><span nz-icon nzType="message"></span>Ask us</a>
+            }
             <a [routerLink]="context.link('invoices')" routerLinkActive="active"><span nz-icon nzType="file-text"></span>Invoices</a>
             <a [routerLink]="context.link('profile')" routerLinkActive="active"><span nz-icon nzType="user"></span>My details</a>
           </nav>
@@ -97,6 +100,22 @@ export class PortalShellComponent {
   readonly initial = () => (this.context.clinic()?.name ?? 'D').trim().charAt(0).toUpperCase();
 
   constructor() {
+    // The assistant link shows only when the server has a model configured.
+    effect(() => {
+      const signedIn = this.signedIn();
+      untracked(() => {
+        if (!signedIn) {
+          this.context.assistant.set(false);
+          return;
+        }
+        this.api.assistantStatus().pipe(catchError(() => of(null)))
+          .subscribe((status) => {
+            this.context.assistant.set(status?.enabled === true);
+            if (status?.maxMessageLength) this.context.assistantMaxLength.set(status.maxMessageLength);
+          });
+      });
+    });
+
     inject(ActivatedRoute).paramMap.pipe(
       map((params) => (params.get('slug') ?? '').toLowerCase()),
       tap((slug) => {

@@ -34,6 +34,11 @@ export const PORTAL_ROUTES: Routes = [
             loadComponent: () => import('./portal-book.component').then((m) => m.PortalBookComponent)
           },
           {
+            path: 'assistant',
+            title: 'Ask us',
+            loadComponent: () => import('./portal-assistant.component').then((m) => m.PortalAssistantComponent)
+          },
+          {
             path: 'invoices',
             title: 'Invoices',
             loadComponent: () => import('./portal-invoices.component').then((m) => m.PortalInvoicesComponent)
