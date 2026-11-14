@@ -160,13 +160,18 @@ appointments, doctors, services or schedules:
 - [x] **Security: JWT secret in `appsettings.json`.** ✅ Done 2026-11-11: removed from `appsettings.json`; local dev uses a
   key in `appsettings.Development.json`, tests set their own. Startup refuses a missing key, one under 32 bytes, or (outside
   Development) any key ever committed to the repo. **Deploy:** set `Jwt__SecretKey` (env var or key vault) to a new random value.
-- [ ] **`Program.cs` is ~980 lines of one-off DB patches.** The startup `AlignLegacy*Schema`
+- [x] **`Program.cs` is ~980 lines of one-off DB patches.** The startup `AlignLegacy*Schema`
   raw-SQL methods should become migrations, or be deleted once all databases are migrated.
+  ✅ Done 2026-11-14: moved into migration `AlignLegacySchema` (ordered right after `SecureMultiTenantAuthAndPatientsV2`,
+  where InitialCreate's old table shapes still need it), and startup now just runs `MigrateAsync` (`Program.cs` 1,094 →
+  340 lines). Each table is aligned only if it still has the old shape, so databases the startup patches already
+  aligned apply it out of order as a no-op. It can't be deleted while InitialCreate builds the old schema.
   2026-11-01: a fresh database could not be created at all (AddSchedulingEngine indexed a column the patches create
   later; InitialCreate's required `Clinics.Slug` broke every clinic insert). Fixed: startup now migrates to
   `SecureMultiTenantAuthAndPatientsV2`, runs the patches, then continues; migration `AllowNullClinicSlug`. The
   integration tests now prove a fresh install works. Note: the filtered `IX_Clinics_Slug` index needs
-  QUOTED_IDENTIFIER ON for writes (SqlClient default; use `sqlcmd -I`).- [x] **Build/cache folders in git.** `.dotnet-cli`, `.pnpm-store`, `.nuget`, `.buildtmp`,
+  QUOTED_IDENTIFIER ON for writes (SqlClient default; use `sqlcmd -I`).
+- [x] **Build/cache folders in git.** `.dotnet-cli`, `.pnpm-store`, `.nuget`, `.buildtmp`,
   `.appdata` and `.vs` show up in git. Add them to `.gitignore` and untrack them. ✅ Done 2026-11-01.
 - [ ] No Angular unit tests. (API integration tests exist since 2026-11-01.)
 - [x] Angular initial bundle was 1.73 MB, over the 1.5 MB budget. ✅ Done 2026-11-11: now 1.22 MB (239 kB transferred).

@@ -55,7 +55,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public Task InitializeAsync()
     {
-        // Building the server runs the API's startup: migrations, legacy schema alignment and seed.
+        // Building the server runs the API's startup: migrations and seed.
         _ = Server;
         using var scope = Services.CreateScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.GetDbConnection().Database;
