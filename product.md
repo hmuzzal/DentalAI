@@ -450,11 +450,19 @@ move or cancel their own visits. Voice comes in Phase 7.
   limit, the scheduling engine and its lock. A weak model makes the assistant less helpful, never less safe.
 - **Confirm first, enforced by the server.** Booking, moving and cancelling take two steps. The first tool call only
   checks the change against every rule, including whether the time is still open (`PortalService.Preview*`). It saves
-  nothing and returns `needs_confirmation` with the exact change ("Book Cleaning with Dr. Sarah Ahmed on Tue, Nov 18 at
-  3:00 PM"). The change runs only when the model asks for exactly the same change while answering the patient's very
-  next message, and that message says yes ("yes", "ok go ahead"; not "no", "don't", "instead"). Picking a time ("the
-  first one please") therefore gets a question, not a booking. Online bookings still arrive as Pending unless the clinic
-  auto-confirms. (Before 2026-11-14 this was only a prompt rule, and qwen2.5:7b once booked when the patient picked a time.)
+  nothing, stores the change as pending and returns `needs_confirmation` with the exact change ("Book Cleaning with
+  Dr. Sarah Ahmed on Fri, Nov 20 at 2:15 PM"). When the patient's very next message says yes ("yes", "ok go ahead"; not
+  "no", "don't", "instead"), **the server makes the stored change itself** and shows the model the result. In real tests
+  qwen2.5:7b often didn't make the second call, so nothing was booked. Online bookings still arrive as Pending unless the
+  clinic auto-confirms.
+- **The server also proposes a picked time.** When the patient names one time right after times were offered ("can I have
+  2:15?"), the server checks that exact time with the last search's service, dentist and day. If exactly one dentist has it
+  open, the server proposes it (stored as pending), so the model only has to ask. The model kept answering "Would you like to
+  confirm?" in its own words without proposing anything. "Anything after 3?" and two times are left to the model.
+- **Guards on what the model says** (each sends the model a private note, up to 2 per message): it claims a booking, move
+  or cancellation that no tool made ("has been booked", "is booked" while a change is under way); it calls a visit confirmed
+  when no lookup shows it Confirmed; it asks the patient to confirm one specific change without having checked it; it says
+  it will check something instead of checking.
 - **Server-side conversations.** The browser holds only a conversation id. History, including tool results, stays in
   server memory (30 minutes idle, 4 hours at most), keyed by patient, so it can't be edited or read by anyone else.
   Nothing is written to the database. More than one API server will need a shared store (e.g. Redis).
@@ -473,13 +481,20 @@ move or cancel their own visits. Voice comes in Phase 7.
   `after` time (24-hour, for "afternoon" or a specific time; it says whether that exact time is open and echoes it in
   12-hour form, because the model once passed 13:15 for "2:15") and returns 4 times spread across the day per dentist,
   each with its 12-hour wording, and a count of
-  the others (it read out all 17 when it got them). The instructions list the next 14 days with their dates, because the model
+  the others (it read out all 17 when it got them), plus a ready-made offer that starts with the day and date ("Fri, Nov 20:
+  12:00 PM, 1:30 PM, 3:00 PM or 4:30 PM with Dr. Sarah Ahmed"). list_my_appointments takes an optional day ("Friday",
+  "tomorrow", a date) and the server picks the visits on it, because the model answered about Tuesday for "my Friday visit".
+  find_open_times takes the day as the patient said it ("next Friday") and the server works out the date; a date on another
+  weekday than the one the patient named is refused (the model passed 2026-11-22, a Sunday, for "next Friday").
+  The instructions list the next 14 days with their dates, because the model
   once turned "Friday" into Tuesday. A Pending visit is described as waiting for the clinic, never "confirmed".
 - **Logging:** every tool call is logged with its name and outcome (ok, or the tool's own error text). Arguments only at
   Debug level, because a booking note is the patient's own text.
 - **No medical advice.** The prompt sends urgent symptoms to the clinic's phone or emergency services.
 - **Doctor names** on the portal, in the assistant and in patient messages get "Dr." once (`DoctorNames`), even when staff
   typed the title into the name (first name "Dr."), which used to show "Dr. Dr. Sarah Ahmed".
+- **Portal pages ignore the staff session.** The app used to check the staff sign-in on every page; with an expired staff
+  token in the same browser, a patient opening the portal was sent to the staff sign-in ("Your session has expired").
 - **Health data.** Free cloud tiers (e.g. Gemini's) may use prompts to improve their models: **test data only**. Real
   clinics need Ollama on our own servers, or a paid provider that signs a HIPAA business associate agreement. The
   API logs a warning when Gemini is used outside Development.
@@ -501,12 +516,12 @@ move or cancel their own visits. Voice comes in Phase 7.
   provider selection
 
 **Not done yet**
-- Builds; all tests pass (181 unit, 130 integration). Tried end to end on 2026-11-13 against the running API with Ollama
+- Builds; all tests pass (262 unit, 134 integration). Tried end to end on 2026-11-13 against the running API with Ollama
   and qwen2.5:7b on the dev machine: questions, afternoon times, booking, "when is my next visit" and cancelling all work
-  (about 1–6 s a reply on the GPU; the first call after loading takes about a minute). The server-enforced confirmation
-  (2026-11-14) is covered by tests but not yet tried with the real model.
-- The chat page itself hasn't been clicked through in a browser (the browser extension wasn't connected). Gemini hasn't
-  been tried (no key yet).
+  (about 1–6 s a reply on the GPU; the first call after loading takes about a minute). On 2026-11-14 the chat was clicked
+  through in the browser: "cleaning next Friday afternoon" → 4 times on Fri, Nov 20 → "can I have 2:15 instead?" → one
+  confirmation question → "yes please" → booked (Pending), and "what time is my Friday visit?" in a new chat found it.
+- Gemini hasn't been tried (no key yet). The model sometimes leaves the date out of its own wording.
 - Later: OpenAI and Claude adapters; a per-clinic on/off switch; a staff view of chats; the assistant for visitors
   who aren't signed in (FAQ only); Bengali.
 

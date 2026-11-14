@@ -108,3 +108,8 @@ export function isPortalAuthRequest(url: string): boolean {
   return /\/api\/portal\/(auth\/|clinics\/)/.test(url);
 }
 
+
+/** A patient portal page (/p/{clinic}/...), as opposed to the staff app. */
+export function isPortalPath(path: string): boolean {
+  return /^\/p\/[^/]+/.test(path);
+}

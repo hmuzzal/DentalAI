@@ -55,4 +55,5 @@ public interface IAssistantConversationStore
 
 /// <param name="Key">What exactly would change, e.g. "book|service|dentist|start-utc".</param>
 /// <param name="Turn">The patient message during which it was proposed.</param>
-public sealed record PendingChange(string Key, int Turn);
+/// <param name="Tool">The tool and arguments that make the change, so the server can make it when the patient says yes.</param>
+public sealed record PendingChange(string Key, int Turn, string Tool, string ArgumentsJson);

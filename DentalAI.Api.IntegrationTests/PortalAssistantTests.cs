@@ -39,7 +39,7 @@ public sealed partial class PortalTests
             r =>
             {
                 offered = LastResult(r, "find_open_times").GetProperty("dentists")[0].GetProperty("times")[0].GetProperty("start").GetString();
-                return Say($"I have {offered}. Shall I book it?");
+                return Say($"I have {offered}. Which time suits you?");
             });
 
         var first = await SendAsync(patient, null, "I need a check-up");
@@ -70,13 +70,12 @@ public sealed partial class PortalTests
         Assert.False(picked.AppointmentsChanged);
         Assert.Empty(await SchedulingApi.ReadAsync<List<PortalAppointment>>(await patient.GetAsync("/api/portal/appointments")));
 
-        ChatModel.Script(
-            _ => Call(("book_appointment", new { service_id = "S1", dentist_id = "D1", start = offered })),
-            r =>
-            {
-                Assert.True(LastResult(r, "book_appointment").GetProperty("ok").GetBoolean());
-                return Say("You're booked.");
-            });
+        // The yes: the server makes the agreed change itself (models forget to call again) and shows the model the result.
+        ChatModel.Script(r =>
+        {
+            Assert.True(LastResult(r, "book_appointment").GetProperty("ok").GetBoolean());
+            return Say("You're booked.");
+        });
 
         var second = await SendAsync(patient, first.ConversationId, "Yes please");
         Assert.True(second.AppointmentsChanged);
@@ -211,17 +210,175 @@ public sealed partial class PortalTests
         Assert.Equal("Pending", visits.Single(a => a.Id == visit.Id).Status);
 
         // That reply still put the change to the patient, so a yes now goes through.
-        ChatModel.Script(
-            _ => Call(cancel),
-            r =>
-            {
-                Assert.True(LastResult(r, "cancel_appointment").GetProperty("ok").GetBoolean());
-                return Say("It's cancelled.");
-            });
+        ChatModel.Script(r =>
+        {
+            // Made by the server on the yes, before the model is asked.
+            Assert.True(LastResult(r, "cancel_appointment").GetProperty("ok").GetBoolean());
+            return Say("It's cancelled.");
+        });
         var done = await SendAsync(patient, asked.ConversationId, "Actually yes, go ahead");
         Assert.True(done.AppointmentsChanged);
         visits = await SchedulingApi.ReadAsync<List<PortalAppointment>>(await patient.GetAsync("/api/portal/appointments"));
         Assert.Equal("Cancelled", visits.Single(a => a.Id == visit.Id).Status);
+    }
+
+    [Fact]
+    public async Task Assistant_FindsTheVisitThePatientNamesByDay_AndOffersTimesWithTheDate()
+    {
+        var portal = await PortalClinicAsync(s => s with { MinNoticeHours = 0 });
+        var (doctorId, serviceId) = await DoctorAndServiceAsync(portal);
+        var patient = Patient(await SignInNewPatientAsync(portal, "Kim"));
+        var firstDay = SchedulingApi.FutureClinicDate(3);
+        var secondDay = SchedulingApi.FutureClinicDate(4);
+        await BookAsync(patient, doctorId, serviceId, (await SlotsAsync(patient, doctorId, serviceId, firstDay))[0].StartTimeUtc);
+        var second = await SchedulingApi.ReadAsync<PortalAppointment>(
+            await BookAsync(patient, doctorId, serviceId, (await SlotsAsync(patient, doctorId, serviceId, secondDay))[0].StartTimeUtc));
+        var weekday = secondDay.DayOfWeek.ToString();
+
+        ChatModel.Script(
+            _ => Call(("list_my_appointments", new { day = weekday }), ("find_open_times", new
+            {
+                service_id = serviceId.ToString(),
+                date = secondDay.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            })),
+            r =>
+            {
+                // Only the visit on the day the patient named, not the earlier one.
+                var visits = LastResult(r, "list_my_appointments");
+                var match = Assert.Single(visits.GetProperty("matching").EnumerateArray().ToList());
+                Assert.Equal(weekday, match.GetProperty("weekday").GetString());
+                Assert.StartsWith(secondDay.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), match.GetProperty("start").GetString());
+                Assert.Equal("Pending", second.Status);
+                Assert.StartsWith("This is the visit", visits.GetProperty("note").GetString());
+
+                // The offer to copy starts with the day and date.
+                var offer = LastResult(r, "find_open_times").GetProperty("dentists")[0].GetProperty("offer").GetString();
+                Assert.StartsWith(secondDay.ToString("ddd, MMM d", CultureInfo.GetCultureInfo("en-US")) + ": ", offer);
+                return Say("Your visit that day is pending.");
+            });
+        await SendAsync(patient, null, $"Is my {weekday} visit confirmed?");
+
+        // The patient names a day: a date on another weekday is refused, and the day's name is turned into the date.
+        ChatModel.Script(
+            _ => Call(("find_open_times", new
+            {
+                service_id = serviceId.ToString(),
+                date = secondDay.AddDays(2).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            })),
+            r =>
+            {
+                Assert.Contains($"The patient said {weekday}", LastResult(r, "find_open_times").GetProperty("error").GetString());
+                return Call(("find_open_times", new { service_id = serviceId.ToString(), date = weekday }));
+            },
+            r =>
+            {
+                Assert.Equal(secondDay.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), LastResult(r, "find_open_times").GetProperty("date").GetString());
+                return Say("Here are the times.");
+            });
+        await SendAsync(patient, null, $"Anything on {weekday}?");
+
+        ChatModel.Script(
+            _ => Call(("list_my_appointments", new { day = "soon" })),
+            r =>
+            {
+                Assert.Contains("weekday", LastResult(r, "list_my_appointments").GetProperty("error").GetString());
+                return Say("Which day?");
+            });
+        await SendAsync(patient, null, "When is it?");
+    }
+
+    [Fact]
+    public async Task Assistant_ThatProposesInItsOwnWords_IsSentToTheTool_ThenTheYesBooksWithoutTheModel()
+    {
+        var portal = await PortalClinicAsync(s => s with { MinNoticeHours = 0 });
+        var (doctorId, serviceId) = await DoctorAndServiceAsync(portal);
+        var session = await SignInNewPatientAsync(portal, "Lena");
+        var patient = Patient(session);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(session.Clinic.TimeZone);
+        var slot = (await SlotsAsync(patient, doctorId, serviceId, SchedulingApi.FutureClinicDate(2)))[1];
+        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(slot.StartTimeUtc, DateTimeKind.Utc), zone);
+        var start = local.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture);
+        var say = local.ToString("h:mm tt", CultureInfo.GetCultureInfo("en-US"));
+
+        ChatModel.Script(
+            _ => Say($"Shall I book {say} for you?"),
+            r =>
+            {
+                Assert.Contains("without calling the tool", r.Messages[^1].Text);
+                return Call(("book_appointment", new { service_id = serviceId.ToString(), dentist_id = doctorId.ToString(), start }));
+            },
+            r =>
+            {
+                Assert.True(LastResult(r, "book_appointment").GetProperty("needs_confirmation").GetBoolean());
+                return Say($"Book a visit at {say}?");
+            });
+        var asked = await SendAsync(patient, null, $"{say} please");
+        Assert.False(asked.AppointmentsChanged);
+
+        // The yes books it even though the model doesn't call anything.
+        ChatModel.Script(r =>
+        {
+            Assert.True(LastResult(r, "book_appointment").GetProperty("ok").GetBoolean());
+            return Say("Done.");
+        });
+        var booked = await SendAsync(patient, asked.ConversationId, "Yes");
+        Assert.True(booked.AppointmentsChanged);
+        Assert.Single(await SchedulingApi.ReadAsync<List<PortalAppointment>>(await patient.GetAsync("/api/portal/appointments")));
+
+        // Picking a time right after times were offered: "it has been booked" is checked even without a yes.
+        ChatModel.Script(
+            _ => Say($"Your visit has been booked for {say}. Is this correct?"),
+            r =>
+            {
+                Assert.Contains("no tool was called", r.Messages[^1].Text);
+                return Say("Sorry, that's already your visit.");
+            });
+        Assert.Equal("Sorry, that's already your visit.", (await SendAsync(patient, asked.ConversationId, $"Can I have {say} instead?")).Reply);
+
+        // A yes later on doesn't make it again.
+        ChatModel.Script(_ => Say("You're welcome."));
+        Assert.False((await SendAsync(patient, asked.ConversationId, "Yes, thanks")).AppointmentsChanged);
+    }
+
+    [Fact]
+    public async Task Assistant_APatientPickingAnOfferedTime_GetsItProposedByTheServer_AndBookedOnYes()
+    {
+        var portal = await PortalClinicAsync(s => s with { MinNoticeHours = 0 });
+        var (_, serviceId) = await DoctorAndServiceAsync(portal);
+        var patient = Patient(await SignInNewPatientAsync(portal, "Mona"));
+        var day = SchedulingApi.FutureClinicDate(2);
+        string? say = null, start = null;
+
+        ChatModel.Script(
+            _ => Call(("find_open_times", new { service_id = serviceId.ToString(), date = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) })),
+            r =>
+            {
+                var second = LastResult(r, "find_open_times").GetProperty("dentists")[0].GetProperty("times")[1];
+                say = second.GetProperty("say").GetString();
+                start = second.GetProperty("start").GetString();
+                return Say("Which time suits you?");
+            });
+        var offered = await SendAsync(patient, null, "A cleaning please");
+
+        // The model answers in its own words, but the server has already checked and proposed the time.
+        ChatModel.Script(r =>
+        {
+            var check = LastResult(r, "book_appointment");
+            Assert.True(check.GetProperty("needs_confirmation").GetBoolean());
+            Assert.Contains(say!, check.GetProperty("change").GetString());
+            return Say($"Shall I book {say}?");
+        });
+        var asked = await SendAsync(patient, offered.ConversationId, $"Can I have {say!.Replace(" ", "").ToLowerInvariant()} instead?");
+        Assert.False(asked.AppointmentsChanged);
+
+        ChatModel.Script(r =>
+        {
+            Assert.True(LastResult(r, "book_appointment").GetProperty("ok").GetBoolean());
+            return Say("Done.");
+        });
+        Assert.True((await SendAsync(patient, offered.ConversationId, "Yes")).AppointmentsChanged);
+        Assert.Single(await SchedulingApi.ReadAsync<List<PortalAppointment>>(await patient.GetAsync("/api/portal/appointments")));
+        Assert.NotNull(start);
     }
 
     private static string FirstId(JsonElement result, string list) => result.GetProperty(list)[0].GetProperty("id").GetString()!;
@@ -270,6 +427,20 @@ public sealed partial class PortalTests
         var replaced = await SendAsync(patient, null, "Yes, cancel it");
         Assert.DoesNotContain("has been cancelled", replaced.Reply);
         Assert.Contains("nothing has been changed", replaced.Reply);
+
+        // "Yes" after the model asked in its own words, without the booking tool: "is booked" is a claim too.
+        ChatModel.Script(
+            _ => Say("Your appointment is booked with Dr. Sarah Ahmed at 2:15 PM on Friday, Nov 20."),
+            r =>
+            {
+                Assert.Contains("no tool was called", r.Messages[^1].Text);
+                return Say("Sorry, that isn't booked yet.");
+            });
+        Assert.Equal("Sorry, that isn't booked yet.", (await SendAsync(patient, null, "Yes")).Reply);
+
+        // Telling the patient about a visit they already have is not a claim.
+        ChatModel.Script(_ => Say("Your next visit is booked for Tuesday at 2:00 PM."));
+        Assert.Equal("Your next visit is booked for Tuesday at 2:00 PM.", (await SendAsync(patient, null, "When is my next visit?")).Reply);
     }
 
     [Fact]

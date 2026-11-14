@@ -40,6 +40,7 @@ public sealed class AssistantConfirmedClaimTests
     [InlineData("Yes, it's confirmed!")]
     [InlineData("You're all confirmed for Tuesday.")]
     [InlineData("Your visit has been confirmed.")]
+    [InlineData("We have confirmed your appointment for a teeth cleaning on Friday, November 20 at 2:15 PM. Is this correct?")] // seen
     public void Claims_AreSpotted(string reply) => Assert.True(ReceptionistService.SaysConfirmed(reply));
 
     [Theory]

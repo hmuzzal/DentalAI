@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DentalAI.Application.Common.Ai;
 using DentalAI.Application.Common.Interfaces;
 using DentalAI.Application.Common.Models;
@@ -61,6 +62,10 @@ public sealed class ReceptionistService(
 
         var conversation = (request.ConversationId is { } id ? conversations.Get(patientId, id) : null) ?? new AssistantConversation();
         conversation.Turn++;
+        // A booking, move or cancellation is under way: then "it has been booked" must be backed by a tool that did it.
+        // Picking a time ("can I have 2:15?") right after times were offered counts too.
+        var changeInPlay = conversation.Pending is not null || SaysYes(text) || AsksForAChange(text) || MentionsATime(text)
+            || conversation.Messages.TakeLast(8).Any(m => m.ToolName is "find_open_times" or "book_appointment" or "reschedule_appointment" or "cancel_appointment");
         var context = new ToolContext(profile.Data!, SchedulingEngine.ResolveTimeZone(profile.Data!.Clinic.TimeZone), conversation, text);
 
         // Work on a copy: if the model can't be reached, the chat stays as it was and the patient can send again.
@@ -80,6 +85,23 @@ public sealed class ReceptionistService(
 
         try
         {
+            // The patient said yes to the change put to them in the last reply: the server makes it, rather than
+            // trusting the model to repeat the call (in a real test it didn't, and nothing was booked). The model
+            // sees the call and its result in the chat and tells the patient.
+            if (conversation.Pending is { } agreed && agreed.Turn == conversation.Turn - 1 && SaysYes(text))
+            {
+                var call = new ChatToolCall($"agreed-{conversation.Turn}", agreed.Tool, agreed.ArgumentsJson);
+                var (result, didChange) = await RunToolAsync(call, context, cancellationToken);
+                changed |= didChange;
+                logger.LogInformation("Assistant tool {Tool} (the patient said yes): {Outcome}", call.Name, Outcome(result));
+                messages.Add(ChatMessage.Assistant(null, [call]));
+                messages.Add(ChatMessage.ToolResult(call, result));
+            }
+            else
+            {
+                await ProposePickedTimeAsync(text, context, messages, cancellationToken);
+            }
+
             for (var round = 0; round < limits.MaxModelCallsPerMessage && reply is null; round++)
             {
                 var response = await model.CompleteAsync(new ChatRequest(system, TrimHistory(messages), Tools), cancellationToken);
@@ -87,7 +109,9 @@ public sealed class ReceptionistService(
                 {
                     var answer = response.Text?.Trim();
                     var canRemind = corrections.Count < MaxRemindersPerMessage * 2 && round + 1 < limits.MaxModelCallsPerMessage;
-                    if (!changed && ClaimsAChange(answer))
+                    // Only when a change is in play: "your next visit is booked for Tuesday" is fine as an answer to
+                    // "when is my visit?", but after "yes" or "book it" it must be backed by a tool that did it.
+                    if (!changed && changeInPlay && ClaimsAChange(answer))
                     {
                         // Small models sometimes say "it's cancelled" without calling the tool. Never pass that on:
                         // tell the model that nothing was done, then fall back to an honest answer.
@@ -114,6 +138,15 @@ public sealed class ReceptionistService(
 
                         reply = $"Your visit is booked. Your Visits page shows whether the clinic has confirmed it yet{CallText(context)}.";
                         break;
+                    }
+
+                    // "Shall I book 2:15?" in its own words: the change hasn't been checked or stored, so a yes would
+                    // depend on the model making the call later, which small models often don't. Have it call the tool
+                    // now; the server then makes the change itself when the patient says yes.
+                    if (canRemind && !changed && conversation.Pending?.Turn != conversation.Turn && ProposesAChange(answer))
+                    {
+                        Remind(answer, ProposeWithToolNote);
+                        continue;
                     }
 
                     // "Let me check..." with no tool call, or asking the patient for an id: remind the model to use the
@@ -198,13 +231,13 @@ public sealed class ReceptionistService(
             Rules:
             - Use the tools for every fact about services, dentists, open times, appointments and invoices. Never make up times, availability or amounts.
             - Ids such as S1, D2, A3 come from tool results. Pass them back exactly, but never show them to the patient. Pass start times exactly as find_open_times gave them.
-            - To turn a day the patient names ("Friday", "next Monday", "tomorrow") into a date, read it from the two-week list above. Never work it out yourself. Say the day and date back, e.g. "Fri, Nov 20".
-            - When offering times, offer the three or four that find_open_times returns, never a long list. If the patient wants a different time, call find_open_times again with after set to that time.
+            - When the patient names a day ("Friday", "next Monday", "tomorrow"), pass those words as date to find_open_times; the tool works out the date and returns it. Say the day and date back as the tool gives them, e.g. "Fri, Nov 20". Never work out a date yourself.
+            - When offering times, copy the offer text find_open_times returns (it starts with the day and date), never a long list. If the patient wants a different time, call find_open_times again with after set to that time.
             - Never say you will check or look something up: call the tool right away, in the same turn, and answer with what it returns.
-            - Never ask the patient for an id. To find their appointment, call list_my_appointments.
+            - Never ask the patient for an id. To find their appointment, call list_my_appointments. When they name it by its day ("my Friday visit", "tomorrow's appointment"), pass that day and talk about the visit it returns; if it returns more than one, ask which.
             - For "morning" use times before 12:00, for "afternoon" pass after="12:00" to find_open_times. after is 24-hour time: 1 PM = 13:00, 2:15 PM = 14:15, 4:30 PM = 16:30. A time the patient gives without AM or PM between 1 and 6 means PM.
             - To check a time the patient asks for, pass it as after and read open_at_exactly_that_time. When telling the patient a time, use its "say" value.
-            - book_appointment, reschedule_appointment and cancel_appointment first answer needs_confirmation with the exact change. Tell the patient that change and ask them to confirm, even if they already picked the time. Only after they say yes, call the same tool again with the same values. Never say it is done until a tool result says ok.
+            - book_appointment, reschedule_appointment and cancel_appointment only check a change and answer needs_confirmation with the exact change. Call the tool first, then tell the patient that change and ask them to confirm, even if they already picked the time. When they say yes, the system makes the change and you see the result; tell them what it says. Never say it is done until a result says ok.
             - A visit whose status is Pending is waiting for the clinic to confirm it. Say so; never call it confirmed unless its status is Confirmed.
             - If a day has no open times, offer to check the next few days.
             - Online bookings need {clinic.MinNoticeHours} hours' notice and can be up to {clinic.MaxDaysAhead} days ahead. Visits can be moved or cancelled online until {clinic.CancelCutoffHours} hours before.
@@ -220,11 +253,24 @@ public sealed class ReceptionistService(
 
     private const string ClaimWithoutActionNote =
         "[Note from the system, not the patient: your last reply said something was booked, moved or cancelled, but no tool was " +
-        "called, so nothing has changed. If the patient has clearly said yes, call the tool now. Otherwise tell them it is not done yet.]";
+        "called, so nothing has changed. Call book_appointment, reschedule_appointment or cancel_appointment now with the exact " +
+        "values: it checks the change and tells you what to ask the patient to confirm. Never say it is done before a result says ok.]";
+
+    /// <summary>Does the patient's message name a clock time ("2:15", "3 pm")?</summary>
+    public static bool MentionsATime(string? message) =>
+        !string.IsNullOrEmpty(message) && System.Text.RegularExpressions.Regex.IsMatch(message,
+            @"\b\d{1,2}(?::\d{2}|\s*(?:am|pm|a\.m\.|p\.m\.))", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     private static readonly System.Text.RegularExpressions.Regex ChangeClaim = new(
-        @"\b(?:(?:has|have) been|is now|are now|successfully|i've|i have|we've|we have)\s+(?:been\s+)?(?:booked|cancell?ed|rescheduled|moved)\b|\byou're (?:all )?(?:booked|set)\b",
+        @"\b(?:(?:has|have) been|is|are|was|were|successfully|i've|i have|we've|we have)\s+(?:now\s+|all\s+|been\s+)?(?:booked|cancell?ed|rescheduled|moved|scheduled)\b|\byou're (?:all )?(?:booked|set|scheduled)\b|\b(?:booked|cancell?ed|rescheduled|moved|scheduled) (?:you|it|that)\b",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static readonly System.Text.RegularExpressions.Regex ChangeRequest = new(
+        @"\b(?:book|booking|schedule|cancel|cancell?ation|move|reschedule|change)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>Does the patient's message ask to book, move or cancel something?</summary>
+    public static bool AsksForAChange(string? message) => !string.IsNullOrEmpty(message) && ChangeRequest.IsMatch(message);
 
     /// <summary>Does the reply say a visit was booked, moved or cancelled ("has been cancelled", "you're booked")?</summary>
     public static bool ClaimsAChange(string? reply) => !string.IsNullOrEmpty(reply) && ChangeClaim.IsMatch(reply);
@@ -235,7 +281,7 @@ public sealed class ReceptionistService(
         "patient the status it shows; say Pending visits are waiting for the clinic to confirm.]";
 
     private static readonly System.Text.RegularExpressions.Regex ConfirmedClaim = new(
-        @"\b(?:is|are|has been|have been|it's|you're|you are)\s+(?:now\s+|all\s+)?confirmed\b",
+        @"\b(?:is|are|has been|have been|it's|you're|you are|i've|i have|we've|we have)\s+(?:now\s+|all\s+)?confirmed\b",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private static readonly System.Text.RegularExpressions.Regex ConfirmedHedge = new(
@@ -245,6 +291,27 @@ public sealed class ReceptionistService(
     /// <summary>Does the reply say a visit is confirmed ("your visit is confirmed"), without saying it's still waiting?</summary>
     public static bool SaysConfirmed(string? reply) =>
         !string.IsNullOrEmpty(reply) && ConfirmedClaim.IsMatch(reply) && !ConfirmedHedge.IsMatch(reply);
+
+    private const string ProposeWithToolNote =
+        "[Note from the system, not the patient: you asked the patient to confirm a booking, move or cancellation without " +
+        "calling the tool. Call book_appointment, reschedule_appointment or cancel_appointment now with the exact values. " +
+        "It checks the change and returns the exact change to ask about; then ask the patient to confirm that.]";
+
+    private static readonly System.Text.RegularExpressions.Regex Proposal = new(
+        @"\b(?:would you like|shall i|should i|do you want|want me to|like me to|ready to|can i go ahead and)\b[^.?!]*\b(?:book|confirm|cancel|move|reschedule)|\b(?:please confirm|is (?:this|that) (?:correct|right|ok|okay)|does (?:this|that) (?:work|sound good))\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static readonly System.Text.RegularExpressions.Regex ClockTime = new(
+        @"\b\d{1,2}:\d{2}\s*(?:am|pm)?", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Does the reply ask the patient to go ahead with one specific change ("Shall I book 2:15 PM?")? Offering several
+    /// times ("would you like to book one of these?") is not a proposal: the patient hasn't chosen yet.
+    /// </summary>
+    public static bool ProposesAChange(string? reply) =>
+        !string.IsNullOrEmpty(reply)
+        && Proposal.IsMatch(reply)
+        && ClockTime.Matches(reply).Select(m => m.Value.Replace(" ", "").ToLowerInvariant()).Distinct().Count() == 1;
 
     private const string StallNote =
         "[Note from the system, not the patient: don't say you will check, list or find something, and never ask the patient for " +
@@ -284,15 +351,21 @@ public sealed class ReceptionistService(
             """
             {"type":"object","properties":{
               "service_id":{"type":"string","description":"Service id from list_services, e.g. S1."},
-              "date":{"type":"string","description":"Clinic-local day, YYYY-MM-DD."},
+              "date":{"type":"string","description":"The day as the patient said it (Friday, next Monday, tomorrow), or YYYY-MM-DD. The tool works out the date."},
               "dentist_id":{"type":"string","description":"Optional dentist id from list_dentists, e.g. D1. Leave out to check every dentist."},
               "appointment_id":{"type":"string","description":"Optional: when moving an appointment, its id (e.g. A1), so its own time counts as free."},
               "after":{"type":"string","description":"Optional: only times at or after this clinic-local time, HH:mm (e.g. 12:00 for the afternoon)."}
             },"required":["service_id","date"]}
             """),
-        new("list_my_appointments", "Lists this patient's upcoming and recent appointments, with ids and whether each can still be changed online.",
-            """{"type":"object","properties":{}}"""),
-        new("book_appointment", "Books an appointment for this patient. The first call only checks it and returns needs_confirmation; call again with the same values after the patient says yes.",
+        new("list_my_appointments",
+            "Lists this patient's upcoming and recent appointments, with ids and whether each can still be changed online. " +
+            "When the patient means a visit by its day (\"my Friday visit\"), pass day to get only the visits on that day.",
+            """
+            {"type":"object","properties":{
+              "day":{"type":"string","description":"Optional: a weekday (e.g. Friday), today, tomorrow or YYYY-MM-DD."}
+            }}
+            """),
+        new("book_appointment", "Books an appointment for this patient. It only checks the change and returns needs_confirmation; when the patient says yes, the system makes the change.",
             """
             {"type":"object","properties":{
               "service_id":{"type":"string","description":"Service id, e.g. S1."},
@@ -301,14 +374,14 @@ public sealed class ReceptionistService(
               "note":{"type":"string","description":"Optional short note for the clinic from the patient."}
             },"required":["service_id","dentist_id","start"]}
             """),
-        new("reschedule_appointment", "Moves one of this patient's appointments to a new time with the same dentist. The first call only checks it and returns needs_confirmation; call again with the same values after the patient says yes.",
+        new("reschedule_appointment", "Moves one of this patient's appointments to a new time with the same dentist. It only checks the change and returns needs_confirmation; when the patient says yes, the system makes the change.",
             """
             {"type":"object","properties":{
               "appointment_id":{"type":"string","description":"Appointment id from list_my_appointments, e.g. A1."},
               "start":{"type":"string","description":"New start time exactly as find_open_times gave it, YYYY-MM-DDTHH:mm."}
             },"required":["appointment_id","start"]}
             """),
-        new("cancel_appointment", "Cancels one of this patient's appointments. The first call only checks it and returns needs_confirmation; call again with the same values after the patient says yes.",
+        new("cancel_appointment", "Cancels one of this patient's appointments. It only checks the change and returns needs_confirmation; when the patient says yes, the system makes the change.",
             """
             {"type":"object","properties":{
               "appointment_id":{"type":"string","description":"Appointment id from list_my_appointments, e.g. A1."}
@@ -340,10 +413,10 @@ public sealed class ReceptionistService(
                 "list_services" => (await ListServicesAsync(context, cancellationToken), false),
                 "list_dentists" => (await ListDentistsAsync(context, cancellationToken), false),
                 "find_open_times" => (await FindOpenTimesAsync(args, context, cancellationToken), false),
-                "list_my_appointments" => (await ListAppointmentsAsync(context, cancellationToken), false),
-                "book_appointment" => await BookAsync(args, context, cancellationToken),
-                "reschedule_appointment" => await RescheduleAsync(args, context, cancellationToken),
-                "cancel_appointment" => await CancelAsync(args, context, cancellationToken),
+                "list_my_appointments" => (await ListAppointmentsAsync(args, context, cancellationToken), false),
+                "book_appointment" => await BookAsync(call, args, context, cancellationToken),
+                "reschedule_appointment" => await RescheduleAsync(call, args, context, cancellationToken),
+                "cancel_appointment" => await CancelAsync(call, args, context, cancellationToken),
                 "list_my_invoices" => (await ListInvoicesAsync(cancellationToken), false),
                 _ => (Error($"There is no tool called \"{call.Name}\"."), false)
             };
@@ -385,8 +458,13 @@ public sealed class ReceptionistService(
     {
         if (await ResolveServiceAsync(Text(args, "service_id"), context, cancellationToken) is not { } serviceId)
             return Error("Unknown service_id. Call list_services and use an id from it.");
-        if (!DateOnly.TryParseExact(Text(args, "date"), "yyyy-MM-dd", English, DateTimeStyles.None, out var date))
-            return Error("date must be YYYY-MM-DD.");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(clock.UtcNow, context.Zone));
+        if (ResolveDate(Text(args, "date") ?? string.Empty, today) is not { } date)
+            return Error("date must be the day as the patient said it (Friday, next Monday, tomorrow) or YYYY-MM-DD.");
+
+        // The patient said "Friday" but the model worked out a Sunday: don't search the wrong day.
+        if (WeekdayNamed(context.PatientMessage) is { } said && date.DayOfWeek != said)
+            return Error($"The patient said {said}, but {date:yyyy-MM-dd} is a {date.DayOfWeek}. Pass date=\"{said}\" (or \"next {said}\") and the tool works out the date.");
 
         TimeOnly? after = null;
         if (Text(args, "after") is { Length: > 0 } afterText)
@@ -433,14 +511,18 @@ public sealed class ReceptionistService(
             openCount += starts.Count;
             moreTimes |= starts.Count > SuggestedTimesPerDentist;
             openAtAfter |= after is { } wanted && starts.Any(local => TimeOnly.FromDateTime(local) == wanted);
+            // A few times across the day: small models read out every time they are given. Each time is also
+            // written the way the patient says it, so the model doesn't convert 24-hour times itself.
+            var times = SpreadTimes(starts, SuggestedTimesPerDentist)
+                .Select(local => new { Start = local.ToString(LocalFormat, English), Say = local.ToString("h:mm tt", English) })
+                .ToList();
             dentists.Add(new
             {
                 Id = context.Conversation.RefFor('D', doctor.Id),
                 doctor.Name,
-                // A few times across the day: small models read out every time they are given. Each time is also
-                // written the way the patient says it, so the model doesn't convert 24-hour times itself.
-                Times = SpreadTimes(starts, SuggestedTimesPerDentist)
-                    .Select(local => new { Start = local.ToString(LocalFormat, English), Say = local.ToString("h:mm tt", English) }),
+                Times = times,
+                // Ready to copy, day and date first: small models otherwise leave out which day they mean.
+                Offer = times.Count == 0 ? null : $"{date.ToString("ddd, MMM d", English)}: {JoinWithOr(times.Select(t => t.Say))} with {doctor.Name}",
                 OtherOpenTimes = starts.Count > SuggestedTimesPerDentist ? starts.Count - SuggestedTimesPerDentist : (int?)null
             });
         }
@@ -475,25 +557,140 @@ public sealed class ReceptionistService(
             .ToList();
     }
 
-    private async Task<string> ListAppointmentsAsync(ToolContext context, CancellationToken cancellationToken)
+    private static string JoinWithOr(IEnumerable<string> items)
     {
+        var list = items.ToList();
+        return list.Count <= 1 ? string.Join("", list) : $"{string.Join(", ", list.Take(list.Count - 1))} or {list[^1]}";
+    }
+
+    private async Task<string> ListAppointmentsAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken)
+    {
+        // "My Friday visit": the server picks the visits on that day, rather than the model reading dates.
+        Func<DateTime, bool>? onDay = null;
+        var dayText = Text(args, "day");
+        if (!string.IsNullOrEmpty(dayText))
+        {
+            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(clock.UtcNow, context.Zone));
+            onDay = DayMatcher(dayText, today);
+            if (onDay is null) return Error("day must be a weekday such as Friday, or today, tomorrow or YYYY-MM-DD. Pass the day the patient said, e.g. day=\"Friday\".");
+        }
+
         var result = await portal.ListAppointmentsAsync(cancellationToken);
         if (!result.Success) return Error(result.Message);
 
         var now = clock.UtcNow;
         var all = result.Data!;
-        var upcoming = all.Where(a => a.EndTime > now && a.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed)
-            .OrderBy(a => a.StartTime).Take(10);
-        var recent = all.Where(a => !(a.EndTime > now && a.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed))
-            .OrderByDescending(a => a.StartTime).Take(5);
+        bool IsUpcoming(PortalAppointmentDto a) => a.EndTime > now && a.Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed;
+        var upcoming = all.Where(IsUpcoming).OrderBy(a => a.StartTime).ToList();
+        var recent = all.Where(a => !IsUpcoming(a)).OrderByDescending(a => a.StartTime).ToList();
+
+        if (onDay is null)
+            return Json(new
+            {
+                Upcoming = upcoming.Take(10).Select(a => Describe(a, context)),
+                Recent = recent.Take(5).Select(a => Describe(a, context))
+            });
+
+        var matching = upcoming.Concat(recent).Where(a => onDay(Local(a.StartTime, context))).Take(10).ToList();
         return Json(new
         {
-            Upcoming = upcoming.Select(a => Describe(a, context)),
-            Recent = recent.Select(a => Describe(a, context))
+            Day = dayText,
+            Matching = matching.Select(a => Describe(a, context)),
+            Note = matching.Count switch
+            {
+                0 => "The patient has no visit on that day. Their upcoming visits are listed; tell them.",
+                1 => "This is the visit the patient means.",
+                _ => "More than one visit is on that day. Ask the patient which one they mean."
+            },
+            Upcoming = matching.Count == 0 ? upcoming.Take(10).Select(a => Describe(a, context)) : null
         });
     }
 
-    private async Task<(string, bool)> BookAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken)
+    /// <summary>
+    /// The day the patient means, as a test on a clinic-local time; null when unreadable. Takes "Friday", "next fri",
+    /// "today", "tomorrow", "2026-11-20" or "Nov 20". Models also pass their own wording, such as "Fri, Nov 18" with a
+    /// wrong date: a weekday wins over a month and day, because the weekday is what the patient said.
+    /// </summary>
+    public static Func<DateTime, bool>? DayMatcher(string text, DateOnly today) =>
+        ParseDay(text, today) switch
+        {
+            { Date: { } date } => local => DateOnly.FromDateTime(local) == date,
+            { Weekday: { } weekday } => local => local.DayOfWeek == weekday,
+            _ => null
+        };
+
+    /// <summary>
+    /// One clinic-local day: a date as given, or for a weekday the next one from today ("Friday" on a Friday is today,
+    /// "next Friday" then is a week on). Small models get weekday arithmetic wrong, so the server does it.
+    /// </summary>
+    public static DateOnly? ResolveDate(string text, DateOnly today)
+    {
+        var day = ParseDay(text, today);
+        if (day.Date is { } date) return date;
+        if (day.Weekday is not { } weekday) return null;
+        var ahead = ((int)weekday - (int)today.DayOfWeek + 7) % 7;
+        if (ahead == 0 && day.Next) ahead = 7;
+        return today.AddDays(ahead);
+    }
+
+    /// <summary>The one weekday the patient's message names ("Friday", "fri"), if it names exactly one.</summary>
+    public static DayOfWeek? WeekdayNamed(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return null;
+        var named = Words(message).Select(AsWeekday).OfType<DayOfWeek>().Distinct().ToList();
+        return named.Count == 1 ? named[0] : null;
+    }
+
+    private readonly record struct ParsedDay(DateOnly? Date, DayOfWeek? Weekday, bool Next);
+
+    private static ParsedDay ParseDay(string text, DateOnly today)
+    {
+        var words = Words(text);
+        var next = words.Contains("next");
+        words = words.Where(w => w is not ("next" or "this" or "on" or "coming" or "the" or "my")).ToList();
+
+        foreach (var word in words)
+            if (DateOnly.TryParseExact(word, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var exact))
+                return new(exact, null, next);
+        if (words.Contains("today")) return new(today, null, next);
+        if (words.Contains("tomorrow")) return new(today.AddDays(1), null, next);
+
+        foreach (var word in words)
+            if (AsWeekday(word) is { } weekday)
+                return new(null, weekday, next);
+
+        // "Nov 20": this year, or next year when that's well past.
+        for (var i = 0; i + 1 < words.Count; i++)
+        {
+            if (!int.TryParse(words[i + 1], out var dayOfMonth)) continue;
+            for (var month = 1; month <= 12; month++)
+            {
+                var monthName = CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(month).ToLowerInvariant();
+                if (words[i].Length < 3 || !monthName.StartsWith(words[i], StringComparison.Ordinal)) continue;
+                if (dayOfMonth < 1 || dayOfMonth > DateTime.DaysInMonth(today.Year, month)) return default;
+                var date = new DateOnly(today.Year, month, dayOfMonth);
+                return new(date < today.AddDays(-60) ? date.AddYears(1) : date, null, next);
+            }
+        }
+
+        return default;
+    }
+
+    private static List<string> Words(string text) =>
+        text.ToLowerInvariant().Split([' ', ',', '.', '\'', '"', '?', '!'], StringSplitOptions.RemoveEmptyEntries).ToList();
+
+    /// <summary>"friday", "fri", "fridays", "tues", "thurs" as a weekday; anything else null.</summary>
+    private static DayOfWeek? AsWeekday(string word)
+    {
+        var value = word.TrimEnd('s');
+        if (value.Length < 3) return null;
+        foreach (var day in Enum.GetValues<DayOfWeek>())
+            if (day.ToString().ToLowerInvariant().StartsWith(value, StringComparison.Ordinal))
+                return day;
+        return null;
+    }
+
+    private async Task<(string, bool)> BookAsync(ChatToolCall call, JsonElement args, ToolContext context, CancellationToken cancellationToken)
     {
         if (await ResolveServiceAsync(Text(args, "service_id"), context, cancellationToken) is not { } serviceId)
             return (Error("Unknown service_id. Call list_services and use an id from it."), false);
@@ -513,7 +710,7 @@ public sealed class ReceptionistService(
         {
             var preview = await portal.PreviewBookingAsync(request, cancellationToken);
             return preview.Success
-                ? (AskToConfirm(context, key, $"Book {preview.Data!.ServiceName} with {preview.Data.DoctorName} on {When(preview.Data.StartTimeUtc, context)}"), false)
+                ? (AskToConfirm(context, call, key, $"Book {preview.Data!.ServiceName} with {preview.Data.DoctorName} on {When(preview.Data.StartTimeUtc, context)}"), false)
                 : (Error(preview.Message), false);
         }
 
@@ -523,7 +720,7 @@ public sealed class ReceptionistService(
             : (Error(result.Message), false);
     }
 
-    private async Task<(string, bool)> RescheduleAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken)
+    private async Task<(string, bool)> RescheduleAsync(ChatToolCall call, JsonElement args, ToolContext context, CancellationToken cancellationToken)
     {
         if (context.Conversation.Resolve('A', Text(args, "appointment_id")) is not { } appointmentId)
             return (Error("Unknown appointment_id. Call list_my_appointments and use an id from it."), false);
@@ -535,7 +732,7 @@ public sealed class ReceptionistService(
         {
             var preview = await portal.PreviewRescheduleAsync(appointmentId, request, cancellationToken);
             return preview.Success
-                ? (AskToConfirm(context, key, $"Move the {preview.Data!.ServiceName} with {preview.Data.DoctorName} from " +
+                ? (AskToConfirm(context, call, key, $"Move the {preview.Data!.ServiceName} with {preview.Data.DoctorName} from " +
                     $"{When(preview.Data.StartTimeUtc, context)} to {When(preview.Data.NewStartTimeUtc!.Value, context)}"), false)
                 : (Error(preview.Message), false);
         }
@@ -546,7 +743,7 @@ public sealed class ReceptionistService(
             : (Error(result.Message), false);
     }
 
-    private async Task<(string, bool)> CancelAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken)
+    private async Task<(string, bool)> CancelAsync(ChatToolCall call, JsonElement args, ToolContext context, CancellationToken cancellationToken)
     {
         if (context.Conversation.Resolve('A', Text(args, "appointment_id")) is not { } appointmentId)
             return (Error("Unknown appointment_id. Call list_my_appointments and use an id from it."), false);
@@ -556,7 +753,7 @@ public sealed class ReceptionistService(
         {
             var preview = await portal.PreviewCancelAsync(appointmentId, cancellationToken);
             return preview.Success
-                ? (AskToConfirm(context, key, $"Cancel the {preview.Data!.ServiceName} with {preview.Data.DoctorName} on {When(preview.Data.StartTimeUtc, context)}"), false)
+                ? (AskToConfirm(context, call, key, $"Cancel the {preview.Data!.ServiceName} with {preview.Data.DoctorName} on {When(preview.Data.StartTimeUtc, context)}"), false)
                 : (Error(preview.Message), false);
         }
 
@@ -590,6 +787,104 @@ public sealed class ReceptionistService(
         });
     }
 
+    // ---- A time the patient picks ----
+
+    private static readonly System.Text.RegularExpressions.Regex PickedClock = new(
+        @"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?(?![\d:])",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static readonly System.Text.RegularExpressions.Regex NotAPick = new(
+        @"\b(?:after|before|between|around|earlier|later|morning|afternoon|evening|any|anything|other|else|instead of|not)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The one clock time the patient picks ("2:15", "the 3 pm one", "10:30am"), in 24-hour time; null for none, several,
+    /// or a range ("after 3"). Without AM or PM, 1 to 6 means the afternoon, as patients mean at a clinic.
+    /// </summary>
+    public static TimeOnly? PickedTime(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message) || NotAPick.IsMatch(message)) return null;
+        var times = PickedClock.Matches(message)
+            .Where(m => m.Groups[2].Success || m.Groups[3].Success) // "2:15" or "3 pm", not a bare number
+            .Select(m =>
+            {
+                var hour = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+                var minute = m.Groups[2].Success ? int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) : 0;
+                var suffix = m.Groups[3].Value.Replace(".", "").ToLowerInvariant();
+                if (hour is < 1 or > 12 || minute > 59) return (TimeOnly?)null;
+                hour = suffix switch
+                {
+                    "pm" => hour % 12 + 12,
+                    "am" => hour % 12,
+                    _ => hour is >= 1 and <= 6 ? hour + 12 : hour
+                };
+                return new TimeOnly(hour, minute);
+            })
+            .Distinct()
+            .ToList();
+        return times is [{ } only] ? only : null;
+    }
+
+    /// <summary>
+    /// The patient picks a time right after times were offered ("can I have 2:15?"). Small models often answer in their own
+    /// words without checking or proposing it, so the server checks that time with the last search's service, dentist and
+    /// day, and when exactly one dentist has it open, proposes it (stored as pending, like the model's own call). The model
+    /// sees both results and only has to ask; the patient's yes then makes it. Nothing changes without that yes.
+    /// </summary>
+    private async Task ProposePickedTimeAsync(string text, ToolContext context, List<ChatMessage> messages, CancellationToken cancellationToken)
+    {
+        if (PickedTime(text) is not { } time) return;
+        var lastSearch = context.Conversation.Messages.TakeLast(8)
+            .SelectMany(m => m.ToolCalls ?? [])
+            .LastOrDefault(c => c.Name == "find_open_times");
+        if (lastSearch is null) return;
+
+        JsonObject searchArgs;
+        try
+        {
+            if (JsonNode.Parse(lastSearch.ArgumentsJson) is not JsonObject parsed) return;
+            searchArgs = parsed;
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        searchArgs["after"] = time.ToString("HH:mm", CultureInfo.InvariantCulture);
+        // "Monday at 2:15": that day, not the one searched last.
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(clock.UtcNow, context.Zone));
+        if (ResolveDate(text, today) is { } namedDay)
+            searchArgs["date"] = namedDay.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var find = new ChatToolCall($"picked-find-{context.Conversation.Turn}", "find_open_times", searchArgs.ToJsonString());
+        var (found, _) = await RunToolAsync(find, context, cancellationToken);
+        logger.LogInformation("Assistant tool {Tool} (the patient picked a time): {Outcome}", find.Name, Outcome(found));
+        messages.Add(ChatMessage.Assistant(null, [find]));
+        messages.Add(ChatMessage.ToolResult(find, found));
+
+        using var result = JsonDocument.Parse(found);
+        var root = result.RootElement;
+        if (!root.TryGetProperty("open_at_exactly_that_time", out var open) || open.ValueKind != JsonValueKind.True) return;
+        var date = root.GetProperty("date").GetString();
+        var start = $"{date}T{time:HH\\:mm}";
+        var dentists = root.GetProperty("dentists").EnumerateArray()
+            .Where(d => d.TryGetProperty("times", out var times) && times.GetArrayLength() > 0
+                        && times[0].GetProperty("start").GetString() == start)
+            .Select(d => d.GetProperty("id").GetString())
+            .ToList();
+        if (dentists.Count != 1) return; // several dentists free then: let the model ask which
+
+        var appointmentId = searchArgs["appointment_id"]?.GetValue<string>();
+        var propose = appointmentId is { Length: > 0 }
+            ? new ChatToolCall($"picked-{context.Conversation.Turn}", "reschedule_appointment",
+                new JsonObject { ["appointment_id"] = appointmentId, ["start"] = start }.ToJsonString())
+            : new ChatToolCall($"picked-{context.Conversation.Turn}", "book_appointment",
+                new JsonObject { ["service_id"] = searchArgs["service_id"]?.GetValue<string>(), ["dentist_id"] = dentists[0], ["start"] = start }.ToJsonString());
+        var (proposed, _) = await RunToolAsync(propose, context, cancellationToken);
+        logger.LogInformation("Assistant tool {Tool} (the patient picked a time): {Outcome}", propose.Name, Outcome(proposed));
+        messages.Add(ChatMessage.Assistant(null, [propose]));
+        messages.Add(ChatMessage.ToolResult(propose, proposed));
+    }
+
     // ---- Confirmation ----
     // Asking the patient before a change isn't left to the model. The first call for a change only checks it and stores
     // it as pending. It runs only when the model asks for exactly the same change while answering the patient's very next
@@ -606,16 +901,16 @@ public sealed class ReceptionistService(
         return confirmed;
     }
 
-    private static string AskToConfirm(ToolContext context, string key, string change)
+    private static string AskToConfirm(ToolContext context, ChatToolCall call, string key, string change)
     {
-        context.Conversation.Pending = new PendingChange(key, context.Conversation.Turn);
+        context.Conversation.Pending = new PendingChange(key, context.Conversation.Turn, call.Name, call.ArgumentsJson);
         return Json(new
         {
             Ok = false,
             NeedsConfirmation = true,
             Change = change,
-            Instruction = "Nothing has been changed yet. Ask the patient to confirm exactly this change. Once they say yes, " +
-                          "call this tool again with the same values."
+            Instruction = "Nothing has been changed yet. Ask the patient to confirm exactly this change. When they say yes, " +
+                          "the system makes the change and you will see the result."
         });
     }
 
@@ -647,6 +942,7 @@ public sealed class ReceptionistService(
         Dentist = a.DoctorName,
         DentistId = context.Conversation.RefFor('D', a.DoctorId),
         Start = Local(a.StartTime, context).ToString(LocalFormat, English),
+        Weekday = Local(a.StartTime, context).ToString("dddd", English),
         When = Local(a.StartTime, context).ToString("ddd, MMM d 'at' h:mm tt", English),
         Status = a.Status == AppointmentStatus.Pending ? "Pending (waiting for the clinic to confirm)" : a.Status.ToString(),
         a.CanCancel,
