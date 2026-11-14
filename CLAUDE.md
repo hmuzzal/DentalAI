@@ -81,3 +81,15 @@ Definition of done: CI green, tests for the new domain rules, `product.md` updat
   migration rewrites `ApplicationDbContextModelSnapshot`, so build only one migration-adding slice at a time. If
   `master` gained a migration, remove yours, rebase, and regenerate it instead of hand-merging the snapshot.
 - **Stay in scope:** new ideas go into the relevant "Later" note in `product.md`, not into the current slice.
+
+### Sub-agents (fullstack-dev-kit)
+
+Use them on every slice, not only when asked:
+
+- **Before building:** a slice that touches more than one layer (entity, API, Angular) goes through
+  `fullstack-planner` first; use `dotnet-architect` when choosing a backend approach.
+- **While building:** hand Angular screens to `angular-specialist`, and model changes to `ef-migration-helper`.
+- **Before the PR:** run `code-reviewer` and `test-writer` in parallel. Also run `security-reviewer` for any change
+  touching patient data, sign-in (staff or portal), the AI receptionist's tools, invoices/payments or `ClinicId`
+  scoping. Fix what they find before opening the PR.
+- **Red build or tests:** use `build-error-resolver`.
