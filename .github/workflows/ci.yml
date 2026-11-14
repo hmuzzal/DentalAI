@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (build + test)
+    # Windows so the integration tests can use SQL Server LocalDB (they need sp_getapplock and Windows auth).
+    runs-on: windows-latest
+    env:
+      DENTALAI_TEST_SQLSERVER: (localdb)\MSSQLLocalDB
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Start SQL Server LocalDB
+        shell: pwsh
+        run: SqlLocalDB start MSSQLLocalDB
+
+      - name: Restore
+        run: dotnet restore DentalAI.sln
+
+      - name: Build
+        run: dotnet build DentalAI.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test DentalAI.sln --no-build --configuration Release
+
+  frontend:
+    name: Frontend (build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: DentalAI.Web
+    steps:
+      - uses: actions/checkout@v5
+
+      # Version comes from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: DentalAI.Web/package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: DentalAI.Web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm exec ng test --watch=false --browsers=ChromeHeadless
